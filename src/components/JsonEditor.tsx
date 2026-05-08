@@ -27,13 +27,11 @@ import {
   ArrowDownOutlined,
   CodeOutlined,
   FormOutlined,
-  PictureOutlined,
 } from '@ant-design/icons';
 import { RepoConfig, GitHubFile } from '../types';
 import { useGitHub } from '../hooks/useGitHub';
 import { inferSchema } from '../utils/validator';
 import RawEditor from './RawEditor';
-import ImageUploader from './ImageUploader';
 
 const { Title, Text } = Typography;
 
@@ -207,24 +205,7 @@ const JsonEditor: React.FC<JsonEditorProps> = ({ repoConfig, file, onBack }) => 
                 />
               ),
             },
-            {
-              key: 'image',
-              label: (
-                <Space>
-                  <PictureOutlined />
-                  图片上传
-                </Space>
-              ),
-              children: (
-                <ImageUploader
-                  repoConfig={repoConfig}
-                  onUploaded={(url) => {
-                    message.info(`图片URL已复制：${url}`);
-                    navigator.clipboard?.writeText(url);
-                  }}
-                />
-              ),
-            },
+
           ]}
         />
       </Card>

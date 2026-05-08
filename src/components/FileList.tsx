@@ -77,10 +77,10 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
 
   const getFileIcon = (filename: string) => {
     const lower = filename.toLowerCase();
-    if (lower.endsWith('.json')) return <FileTextOutlined style={{ fontSize: 36, color: '#1677ff' }} />;
-    if (lower.endsWith('.md')) return <FileMarkdownOutlined style={{ fontSize: 36, color: '#52c41a' }} />;
-    if (lower.endsWith('.pdf')) return <FilePdfOutlined style={{ fontSize: 36, color: '#f5222d' }} />;
-    return <FileOutlined style={{ fontSize: 36, color: '#999' }} />;
+    if (lower.endsWith('.json')) return <FileTextOutlined style={{ fontSize: 48, color: '#1677ff' }} />;
+    if (lower.endsWith('.md')) return <FileMarkdownOutlined style={{ fontSize: 48, color: '#52c41a' }} />;
+    if (lower.endsWith('.pdf')) return <FilePdfOutlined style={{ fontSize: 48, color: '#f5222d' }} />;
+    return <FileOutlined style={{ fontSize: 48, color: '#999' }} />;
   };
 
   const compressImageFile = async (file: File): Promise<File> => {
@@ -114,7 +114,8 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
           arrayBuffer = await file.arrayBuffer();
         }
 
-        const filePath = `${repoConfig.path}/${file.name}`;
+        const basePath = repoConfig.path.replace(/^\/+/, '');
+        const filePath = basePath ? `${basePath}/${file.name}` : file.name;
 
         // Check if file already exists
         const existingFile = allFiles.find((f) => f.name === file.name);
@@ -236,7 +237,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
           cover={
             <div
               style={{
-                height: 140,
+                height: 160,
                 overflow: 'hidden',
                 display: 'flex',
                 alignItems: 'center',
@@ -249,7 +250,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
                 <Image
                   src={getImageUrl(file)}
                   alt={file.name}
-                  style={{ maxHeight: 140, maxWidth: '100%', objectFit: 'contain' }}
+                  style={{ maxHeight: 160, maxWidth: '100%', objectFit: 'contain' }}
                   preview={true}
                   fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZpbGw9IiNjY2MiIGZvbnQtc2l6ZT0iMTIiPuWKoOi9veWksei0pTwvdGV4dD48L3N2Zz4="
                 />
@@ -263,7 +264,6 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
               ? [
                   <Button
                     type="text"
-                    size="small"
                     icon={<EditOutlined />}
                     onClick={() => onSelectFile(file)}
                     key="edit"
@@ -274,7 +274,6 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
               : []),
             <Button
               type="text"
-              size="small"
               icon={<SwapOutlined />}
               onClick={() => handleReplaceFile(file)}
               key="replace"
@@ -292,7 +291,6 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
             >
               <Button
                 type="text"
-                size="small"
                 danger
                 icon={<DeleteOutlined />}
               >

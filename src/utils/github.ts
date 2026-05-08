@@ -232,10 +232,13 @@ export async function uploadImage(
       .join('')
   );
 
+  // GitHub API rejects paths starting with /
+  const cleanPath = path.replace(/^\/+/, '');
+
   const params: any = {
     owner,
     repo,
-    path,
+    path: cleanPath,
     message,
     content: base64Content,
     branch,
