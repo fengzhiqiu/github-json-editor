@@ -247,12 +247,33 @@ export async function uploadImage(
     params.sha = sha;
   }
 
-  const { data } = await octokit.repos.createOrUpdateFileContents(params);
-
-  return {
-    sha: data.commit.sha || '',
-    url: data.commit.html_url || '',
-  };
+  try {
+    const { data } = await octokit.repos.createOrUpdateFileContents(params);
+    return {
+      sha: data.commit.sha || '',
+      url: data.commit.html_url || '',
+    };
+  } catch (e: any) {
+    // 409 Conflict: file already exists but sha not provided. Fetch sha and retry.
+    if (e.status === 409 && !sha) {
+      const { data: existing } = await octokit.repos.getContent({
+        owner,
+        repo,
+        path: cleanPath,
+        ref: branch,
+      });
+      const existingSha = Array.isArray(existing) ? undefined : (existing as any).sha;
+      if (existingSha) {
+        params.sha = existingSha;
+        const { data } = await octokit.repos.createOrUpdateFileContents(params);
+        return {
+          sha: data.commit.sha || '',
+          url: data.commit.html_url || '',
+        };
+      }
+    }
+    throw e;
+  }
 }
 
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];

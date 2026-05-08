@@ -90,6 +90,22 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
     return <FileOutlined style={{ fontSize: 48, color: '#999' }} />;
   };
 
+  // Sanitize filename: replace spaces/special chars, keep extension
+  const sanitizeFilename = (name: string): string => {
+    const lastDot = name.lastIndexOf('.');
+    const ext = lastDot >= 0 ? name.slice(lastDot) : '';
+    const base = lastDot >= 0 ? name.slice(0, lastDot) : name;
+    // Replace spaces, Chinese chars, and special chars with timestamp-based name
+    const hasUnsafe = /[^\w.\-]/.test(base);
+    if (hasUnsafe) {
+      // Generate a clean name: keep alphanumeric parts + timestamp
+      const cleanBase = base.replace(/[^\w]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      const suffix = Date.now().toString(36);
+      return (cleanBase || 'file') + '-' + suffix + ext;
+    }
+    return name;
+  };
+
   const compressImageFile = async (file: File): Promise<File> => {
     const options = {
       maxSizeMB: 1,
@@ -107,15 +123,18 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
   const handleUploadFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
 
-    // Filter out files that already exist locally (dedup)
+    // Filter out files that already exist locally (dedup by sanitized name)
     const existingNames = new Set(allFiles.map((f) => f.name));
-    const newFiles: File[] = [];
+    const newFiles: { file: File; uploadName: string }[] = [];
     const skippedNames: string[] = [];
+    const usedNames = new Set<string>();
     for (let i = 0; i < fileList.length; i++) {
-      if (existingNames.has(fileList[i].name)) {
+      const uploadName = sanitizeFilename(fileList[i].name);
+      if (existingNames.has(uploadName) || existingNames.has(fileList[i].name) || usedNames.has(uploadName)) {
         skippedNames.push(fileList[i].name);
       } else {
-        newFiles.push(fileList[i]);
+        newFiles.push({ file: fileList[i], uploadName });
+        usedNames.add(uploadName);
       }
     }
 
@@ -132,7 +151,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
 
     try {
       const basePath = repoConfig.path.replace(/^\/+/, '');
-      for (const file of newFiles) {
+      for (const { file, uploadName } of newFiles) {
         let arrayBuffer: ArrayBuffer;
 
         // Compress if it's an image
@@ -143,14 +162,14 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
           arrayBuffer = await file.arrayBuffer();
         }
 
-        const filePath = basePath ? `${basePath}/${file.name}` : file.name;
+        const filePath = basePath ? `${basePath}/${uploadName}` : uploadName;
 
         await uploadImage(
           repoConfig.owner,
           repoConfig.repo,
           filePath,
           arrayBuffer,
-          `Upload: ${file.name}`,
+          `Upload: ${uploadName}`,
           repoConfig.branch
         );
       }
