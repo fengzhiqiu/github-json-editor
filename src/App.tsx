@@ -70,7 +70,7 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (currentView) {
       case 'repos':
-        return <RepoSelector onSelect={handleSelectRepo} />;
+        return <RepoSelector onSelect={handleSelectRepo} userLogin={user.login} />;
       case 'files':
         return selectedRepo ? (
           <FileList

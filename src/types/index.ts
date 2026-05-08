@@ -41,6 +41,31 @@ export interface GitHubUser {
   name: string | null;
 }
 
+export interface GitHubRepo {
+  id: number;
+  name: string;
+  full_name: string;
+  owner: {
+    login: string;
+    avatar_url: string;
+  };
+  description: string | null;
+  private: boolean;
+  default_branch: string;
+  updated_at: string;
+  html_url: string;
+  language: string | null;
+}
+
+export interface GitHubContentItem {
+  name: string;
+  path: string;
+  sha: string;
+  size: number;
+  type: 'file' | 'dir' | 'symlink' | 'submodule';
+  download_url: string | null;
+}
+
 export interface JsonSchema {
   type: string;
   properties?: Record<string, JsonSchema>;

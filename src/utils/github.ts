@@ -1,5 +1,5 @@
 import { Octokit } from '@octokit/rest';
-import { GitHubFile, FileContent, CommitResult, GitHubUser } from '../types';
+import { GitHubFile, FileContent, CommitResult, GitHubUser, GitHubRepo, GitHubContentItem } from '../types';
 
 let octokitInstance: Octokit | null = null;
 
@@ -23,6 +23,67 @@ export async function getCurrentUser(): Promise<GitHubUser> {
     avatar_url: data.avatar_url,
     name: data.name,
   };
+}
+
+export async function listUserRepos(
+  page: number = 1,
+  perPage: number = 30
+): Promise<{ repos: GitHubRepo[]; hasMore: boolean }> {
+  const octokit = getOctokit();
+  const { data } = await octokit.repos.listForAuthenticatedUser({
+    sort: 'updated',
+    direction: 'desc',
+    per_page: perPage,
+    page,
+  });
+
+  const repos: GitHubRepo[] = data.map((repo) => ({
+    id: repo.id,
+    name: repo.name,
+    full_name: repo.full_name,
+    owner: {
+      login: repo.owner.login,
+      avatar_url: repo.owner.avatar_url,
+    },
+    description: repo.description,
+    private: repo.private,
+    default_branch: repo.default_branch,
+    updated_at: repo.updated_at || '',
+    html_url: repo.html_url,
+    language: repo.language,
+  }));
+
+  return {
+    repos,
+    hasMore: repos.length === perPage,
+  };
+}
+
+export async function listContents(
+  owner: string,
+  repo: string,
+  path: string = '',
+  branch?: string
+): Promise<GitHubContentItem[]> {
+  const octokit = getOctokit();
+  const params: any = { owner, repo, path };
+  if (branch) {
+    params.ref = branch;
+  }
+  const { data } = await octokit.repos.getContent(params);
+
+  if (!Array.isArray(data)) {
+    throw new Error('Path is not a directory');
+  }
+
+  return data.map((item) => ({
+    name: item.name,
+    path: item.path,
+    sha: item.sha,
+    size: item.size || 0,
+    type: item.type as GitHubContentItem['type'],
+    download_url: item.download_url,
+  }));
 }
 
 export async function listFiles(
@@ -72,13 +133,6 @@ export async function getFileContent(
   if (Array.isArray(data) || data.type !== 'file') {
     throw new Error('Path is not a file');
   }
-
-  const content = atob((data as any).content.replace(/\n/g, ''));
-  const decodedContent = decodeURIComponent(
-    Array.from(new Uint8Array(new TextEncoder().encode(content)))
-      .map(() => '')
-      .join('')
-  );
 
   // Use TextDecoder for proper UTF-8 handling
   const rawContent = Uint8Array.from(atob((data as any).content.replace(/\n/g, '')), (c) =>
