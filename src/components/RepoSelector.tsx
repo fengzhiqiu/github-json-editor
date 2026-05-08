@@ -154,7 +154,7 @@ const RepoSelector: React.FC<RepoSelectorProps> = ({ onSelect, userLogin }) => {
 
   const buildTreeData = (contents: GitHubContentItem[], parentPath: string): DataNode[] => {
     const dirs = contents.filter((c) => c.type === 'dir');
-    const jsonFiles = contents.filter((c) => c.type === 'file' && c.name.endsWith('.json'));
+    const files = contents.filter((c) => c.type === 'file');
 
     const nodes: DataNode[] = [];
 
@@ -172,8 +172,8 @@ const RepoSelector: React.FC<RepoSelectorProps> = ({ onSelect, userLogin }) => {
       });
     });
 
-    // Add json files as leaves (not selectable, just for display)
-    jsonFiles.forEach((file) => {
+    // Add files as leaves (not selectable, just for display)
+    files.forEach((file) => {
       nodes.push({
         title: (
           <Space>
@@ -229,11 +229,11 @@ const RepoSelector: React.FC<RepoSelectorProps> = ({ onSelect, userLogin }) => {
     });
   };
 
-  // Check if a directory path has json files
-  const dirHasJsonFiles = (path: string): boolean => {
+  // Check if a directory path has any files
+  const dirHasFiles = (path: string): boolean => {
     const contents = dirContents.get(path);
     if (!contents) return false;
-    return contents.some((c) => c.type === 'file' && c.name.endsWith('.json'));
+    return contents.some((c) => c.type === 'file');
   };
 
   // Handle selecting a directory to use
@@ -260,10 +260,10 @@ const RepoSelector: React.FC<RepoSelectorProps> = ({ onSelect, userLogin }) => {
   const handleSelectRoot = () => {
     if (!browsingRepo) return;
     const rootContents = dirContents.get('');
-    if (rootContents && rootContents.some((c) => c.type === 'file' && c.name.endsWith('.json'))) {
+    if (rootContents && rootContents.some((c) => c.type === 'file')) {
       handleSelectDirectory('');
     } else {
-      message.warning('根目录下没有 .json 文件');
+      message.warning('根目录下没有文件');
     }
   };
 
@@ -351,12 +351,12 @@ const RepoSelector: React.FC<RepoSelectorProps> = ({ onSelect, userLogin }) => {
           <>
             <div style={{ marginBottom: 16 }}>
               <Text type="secondary">
-                点击展开目录，找到包含 .json 文件的目录后点击"选择此目录"
+                点击展开目录，找到目标目录后点击"选择此目录"
               </Text>
             </div>
 
             {/* Root directory select button */}
-            {dirHasJsonFiles('') && (
+            {dirHasFiles('') && (
               <div style={{ marginBottom: 16 }}>
                 <Button
                   type="primary"
@@ -364,7 +364,7 @@ const RepoSelector: React.FC<RepoSelectorProps> = ({ onSelect, userLogin }) => {
                   onClick={handleSelectRoot}
                   size="small"
                 >
-                  选择根目录（含 {dirContents.get('')?.filter((c) => c.type === 'file' && c.name.endsWith('.json')).length} 个 JSON 文件）
+                  选择根目录（含 {dirContents.get('')?.filter((c) => c.type === 'file').length} 个文件）
                 </Button>
               </div>
             )}
@@ -382,11 +382,11 @@ const RepoSelector: React.FC<RepoSelectorProps> = ({ onSelect, userLogin }) => {
                 if (nodeKey.startsWith('file:')) {
                   return <>{titleContent}</>;
                 }
-                const hasJson = dirHasJsonFiles(nodeKey);
+                const hasFiles = dirHasFiles(nodeKey);
                 return (
                   <Space>
                     {titleContent}
-                    {hasJson && (
+                    {hasFiles && (
                       <Button
                         type="primary"
                         size="small"
@@ -396,7 +396,7 @@ const RepoSelector: React.FC<RepoSelectorProps> = ({ onSelect, userLogin }) => {
                           handleSelectDirectory(nodeKey);
                         }}
                       >
-                        选择此目录（{dirContents.get(nodeKey)?.filter((c) => c.type === 'file' && c.name.endsWith('.json')).length} 个 JSON）
+                        选择此目录（{dirContents.get(nodeKey)?.filter((c) => c.type === 'file').length} 个文件）
                       </Button>
                     )}
                   </Space>
