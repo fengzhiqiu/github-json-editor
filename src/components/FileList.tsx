@@ -14,7 +14,6 @@ import {
   Popconfirm,
   Pagination,
   Upload,
-  Modal,
 } from 'antd';
 import {
   FileTextOutlined,
@@ -107,11 +106,33 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
 
   const handleUploadFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
+
+    // Filter out files that already exist locally (dedup)
+    const existingNames = new Set(allFiles.map((f) => f.name));
+    const newFiles: File[] = [];
+    const skippedNames: string[] = [];
+    for (let i = 0; i < fileList.length; i++) {
+      if (existingNames.has(fileList[i].name)) {
+        skippedNames.push(fileList[i].name);
+      } else {
+        newFiles.push(fileList[i]);
+      }
+    }
+
+    if (skippedNames.length > 0) {
+      message.info(`已跳过 ${skippedNames.length} 个重复文件：${skippedNames.slice(0, 3).join(', ')}${skippedNames.length > 3 ? '...' : ''}`);
+    }
+
+    if (newFiles.length === 0) {
+      message.warning('所有文件都已存在，无需上传');
+      return;
+    }
+
     setUploading(true);
 
     try {
-      for (let i = 0; i < fileList.length; i++) {
-        const file = fileList[i];
+      const basePath = repoConfig.path.replace(/^\/+/, '');
+      for (const file of newFiles) {
         let arrayBuffer: ArrayBuffer;
 
         // Compress if it's an image
@@ -122,45 +143,18 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
           arrayBuffer = await file.arrayBuffer();
         }
 
-        const basePath = repoConfig.path.replace(/^\/+/, '');
         const filePath = basePath ? `${basePath}/${file.name}` : file.name;
 
-        // Check if file already exists
-        const existingFile = allFiles.find((f) => f.name === file.name);
-        if (existingFile) {
-          const confirmed = await new Promise<boolean>((resolve) => {
-            Modal.confirm({
-              title: '文件已存在',
-              content: `"${file.name}" 已存在，是否覆盖？`,
-              okText: '覆盖',
-              cancelText: '跳过',
-              onOk: () => resolve(true),
-              onCancel: () => resolve(false),
-            });
-          });
-          if (!confirmed) continue;
-
-          await uploadImage(
-            repoConfig.owner,
-            repoConfig.repo,
-            filePath,
-            arrayBuffer,
-            `Replace: ${file.name}`,
-            repoConfig.branch,
-            existingFile.sha
-          );
-        } else {
-          await uploadImage(
-            repoConfig.owner,
-            repoConfig.repo,
-            filePath,
-            arrayBuffer,
-            `Upload: ${file.name}`,
-            repoConfig.branch
-          );
-        }
+        await uploadImage(
+          repoConfig.owner,
+          repoConfig.repo,
+          filePath,
+          arrayBuffer,
+          `Upload: ${file.name}`,
+          repoConfig.branch
+        );
       }
-      message.success('上传完成');
+      message.success(`上传完成（${newFiles.length} 个文件）`);
       await reloadAfterChange();
     } catch (e) {
       message.error('上传失败: ' + (e as Error).message);
