@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Card,
-  List,
   Button,
   Typography,
   Space,
@@ -9,7 +8,6 @@ import {
   Spin,
   Empty,
   message,
-  Tabs,
   Row,
   Col,
   Image,
@@ -22,11 +20,13 @@ import {
   FileTextOutlined,
   ReloadOutlined,
   ArrowLeftOutlined,
-  CloudDownloadOutlined,
-  PictureOutlined,
   DeleteOutlined,
   SwapOutlined,
   UploadOutlined,
+  EditOutlined,
+  FileOutlined,
+  FilePdfOutlined,
+  FileMarkdownOutlined,
 } from '@ant-design/icons';
 import { RepoConfig, GitHubFile } from '../types';
 import { useGitHub } from '../hooks/useGitHub';
@@ -44,20 +44,17 @@ interface FileListProps {
 const PAGE_SIZE = 20;
 
 const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack }) => {
-  const [jsonFiles, setJsonFiles] = useState<GitHubFile[]>([]);
-  const [imageFiles, setImageFiles] = useState<GitHubFile[]>([]);
+  const [allFiles, setAllFiles] = useState<GitHubFile[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState('json');
   const [uploading, setUploading] = useState(false);
-  const { loading, fetchFiles, fetchAllFiles, uploadImage, deleteFile } = useGitHub();
+  const { loading, fetchAllFiles, uploadImage, deleteFile } = useGitHub();
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const [replacingFile, setReplacingFile] = useState<GitHubFile | null>(null);
 
   const loadFiles = async () => {
     try {
-      const allFiles = await fetchAllFiles(repoConfig);
-      setJsonFiles(allFiles.filter((f) => f.name.endsWith('.json')));
-      setImageFiles(allFiles.filter((f) => isImageFile(f.name)));
+      const files = await fetchAllFiles(repoConfig);
+      setAllFiles(files);
     } catch (e) {
       message.error('加载文件列表失败: ' + (e as Error).message);
     }
@@ -78,28 +75,49 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
     return `https://raw.githubusercontent.com/${repoConfig.owner}/${repoConfig.repo}/${repoConfig.branch}/${file.path}`;
   };
 
+  const getFileIcon = (filename: string) => {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.json')) return <FileTextOutlined style={{ fontSize: 36, color: '#1677ff' }} />;
+    if (lower.endsWith('.md')) return <FileMarkdownOutlined style={{ fontSize: 36, color: '#52c41a' }} />;
+    if (lower.endsWith('.pdf')) return <FilePdfOutlined style={{ fontSize: 36, color: '#f5222d' }} />;
+    return <FileOutlined style={{ fontSize: 36, color: '#999' }} />;
+  };
+
   const compressImageFile = async (file: File): Promise<File> => {
     const options = {
       maxSizeMB: 1,
       maxWidthOrHeight: 1920,
       useWebWorker: true,
     };
-    return await imageCompression(file, options);
+    try {
+      return await imageCompression(file, options);
+    } catch {
+      // If compression fails (e.g. non-image), return original
+      return file;
+    }
   };
 
-  const handleUploadImages = async (fileList: FileList | null) => {
+  const handleUploadFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     setUploading(true);
 
     try {
       for (let i = 0; i < fileList.length; i++) {
         const file = fileList[i];
-        const compressed = await compressImageFile(file);
-        const arrayBuffer = await compressed.arrayBuffer();
+        let arrayBuffer: ArrayBuffer;
+
+        // Compress if it's an image
+        if (isImageFile(file.name)) {
+          const compressed = await compressImageFile(file);
+          arrayBuffer = await compressed.arrayBuffer();
+        } else {
+          arrayBuffer = await file.arrayBuffer();
+        }
+
         const filePath = `${repoConfig.path}/${file.name}`;
 
         // Check if file already exists
-        const existingFile = imageFiles.find((f) => f.name === file.name);
+        const existingFile = allFiles.find((f) => f.name === file.name);
         if (existingFile) {
           const confirmed = await new Promise<boolean>((resolve) => {
             Modal.confirm({
@@ -118,7 +136,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
             repoConfig.repo,
             filePath,
             arrayBuffer,
-            `Replace image: ${file.name}`,
+            `Replace: ${file.name}`,
             repoConfig.branch,
             existingFile.sha
           );
@@ -128,12 +146,12 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
             repoConfig.repo,
             filePath,
             arrayBuffer,
-            `Upload image: ${file.name}`,
+            `Upload: ${file.name}`,
             repoConfig.branch
           );
         }
       }
-      message.success('图片上传完成');
+      message.success('上传完成');
       await loadFiles();
     } catch (e) {
       message.error('上传失败: ' + (e as Error).message);
@@ -142,24 +160,24 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
     }
   };
 
-  const handleDeleteImage = async (file: GitHubFile) => {
+  const handleDeleteFile = async (file: GitHubFile) => {
     try {
       await deleteFile(
         repoConfig.owner,
         repoConfig.repo,
         file.path,
         file.sha,
-        `Delete image: ${file.name}`,
+        `Delete: ${file.name}`,
         repoConfig.branch
       );
       message.success(`已删除 ${file.name}`);
-      setImageFiles((prev) => prev.filter((f) => f.sha !== file.sha));
+      setAllFiles((prev) => prev.filter((f) => f.sha !== file.sha));
     } catch (e) {
       message.error('删除失败: ' + (e as Error).message);
     }
   };
 
-  const handleReplaceImage = (file: GitHubFile) => {
+  const handleReplaceFile = (file: GitHubFile) => {
     setReplacingFile(file);
     replaceInputRef.current?.click();
   };
@@ -170,15 +188,20 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
 
     setUploading(true);
     try {
-      const compressed = await compressImageFile(file);
-      const arrayBuffer = await compressed.arrayBuffer();
+      let arrayBuffer: ArrayBuffer;
+      if (isImageFile(file.name)) {
+        const compressed = await compressImageFile(file);
+        arrayBuffer = await compressed.arrayBuffer();
+      } else {
+        arrayBuffer = await file.arrayBuffer();
+      }
 
       await uploadImage(
         repoConfig.owner,
         repoConfig.repo,
         replacingFile.path,
         arrayBuffer,
-        `Replace image: ${replacingFile.name}`,
+        `Replace: ${replacingFile.name}`,
         repoConfig.branch,
         replacingFile.sha
       );
@@ -196,168 +219,171 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
   };
 
   // Pagination
-  const paginatedImages = imageFiles.slice(
+  const paginatedFiles = allFiles.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
 
-  const renderJsonTab = () => (
-    <>
-      {loading && jsonFiles.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40 }}>
-          <Spin size="large" />
-          <div style={{ marginTop: 16 }}>
-            <Text type="secondary">加载中...</Text>
-          </div>
-        </div>
-      ) : jsonFiles.length === 0 ? (
-        <Empty description="该目录下没有 JSON 文件" />
-      ) : (
-        <List
-          dataSource={jsonFiles}
-          renderItem={(file) => (
-            <List.Item
-              actions={[
-                <Button
-                  type="primary"
-                  size="small"
-                  icon={<CloudDownloadOutlined />}
-                  onClick={() => onSelectFile(file)}
-                  key="edit"
-                >
-                  编辑
-                </Button>,
-              ]}
-              style={{ cursor: 'pointer' }}
-              onClick={() => onSelectFile(file)}
+  const renderFileCard = (file: GitHubFile) => {
+    const isImage = isImageFile(file.name);
+    const isJson = file.name.toLowerCase().endsWith('.json');
+
+    return (
+      <Col xs={12} sm={8} md={6} key={file.sha}>
+        <Card
+          hoverable
+          size="small"
+          cover={
+            <div
+              style={{
+                height: 140,
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#fafafa',
+                borderBottom: '1px solid #f0f0f0',
+              }}
             >
-              <List.Item.Meta
-                avatar={<FileTextOutlined style={{ fontSize: 24, color: '#1677ff' }} />}
-                title={<Text strong>{file.name}</Text>}
-                description={
-                  <Space size="small">
-                    <Tag>{formatSize(file.size)}</Tag>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      {file.path}
-                    </Text>
-                  </Space>
-                }
-              />
-            </List.Item>
-          )}
-        />
-      )}
-    </>
-  );
-
-  const renderImageTab = () => (
-    <>
-      <div style={{ marginBottom: 16 }}>
-        <Upload
-          accept="image/jpg,image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
-          multiple
-          showUploadList={false}
-          beforeUpload={(_file, fileList) => {
-            // Use the native file list from the input
-            const dataTransfer = new DataTransfer();
-            fileList.forEach((f) => dataTransfer.items.add(f as unknown as File));
-            handleUploadImages(dataTransfer.files);
-            return false;
-          }}
-          disabled={uploading}
+              {isImage ? (
+                <Image
+                  src={getImageUrl(file)}
+                  alt={file.name}
+                  style={{ maxHeight: 140, maxWidth: '100%', objectFit: 'contain' }}
+                  preview={true}
+                  fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZpbGw9IiNjY2MiIGZvbnQtc2l6ZT0iMTIiPuWKoOi9veWksei0pTwvdGV4dD48L3N2Zz4="
+                />
+              ) : (
+                getFileIcon(file.name)
+              )}
+            </div>
+          }
+          actions={[
+            ...(isJson
+              ? [
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<EditOutlined />}
+                    onClick={() => onSelectFile(file)}
+                    key="edit"
+                  >
+                    编辑
+                  </Button>,
+                ]
+              : []),
+            <Button
+              type="text"
+              size="small"
+              icon={<SwapOutlined />}
+              onClick={() => handleReplaceFile(file)}
+              key="replace"
+            >
+              替换
+            </Button>,
+            <Popconfirm
+              title="确认删除"
+              description={`确定要删除 "${file.name}" 吗？`}
+              onConfirm={() => handleDeleteFile(file)}
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              key="delete"
+            >
+              <Button
+                type="text"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+              >
+                删除
+              </Button>
+            </Popconfirm>,
+          ]}
         >
-          <Button
-            type="primary"
-            icon={<UploadOutlined />}
-            loading={uploading}
-          >
-            上传图片
-          </Button>
-        </Upload>
-      </div>
+          <Card.Meta
+            description={
+              <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                <Text
+                  ellipsis={{ tooltip: file.name }}
+                  style={{ fontSize: 12, fontWeight: 500 }}
+                >
+                  {file.name}
+                </Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                  {formatSize(file.size)}
+                </Text>
+              </Space>
+            }
+          />
+        </Card>
+      </Col>
+    );
+  };
 
-      {loading && imageFiles.length === 0 ? (
+  return (
+    <Card
+      title={
+        <Space>
+          <Button type="text" icon={<ArrowLeftOutlined />} onClick={onBack} />
+          <FileTextOutlined />
+          <span>{repoConfig.label || `${repoConfig.owner}/${repoConfig.repo}`}</span>
+          <Tag color="geekblue">{repoConfig.path}</Tag>
+          <Tag>{allFiles.length} 个文件</Tag>
+        </Space>
+      }
+      extra={
+        <Space>
+          <Upload
+            multiple
+            showUploadList={false}
+            beforeUpload={(_file, fileList) => {
+              const dataTransfer = new DataTransfer();
+              fileList.forEach((f) => dataTransfer.items.add(f as unknown as File));
+              handleUploadFiles(dataTransfer.files);
+              return false;
+            }}
+            disabled={uploading}
+          >
+            <Button
+              type="primary"
+              icon={<UploadOutlined />}
+              loading={uploading}
+            >
+              上传文件
+            </Button>
+          </Upload>
+          <Button icon={<ReloadOutlined />} onClick={loadFiles} loading={loading}>
+            刷新
+          </Button>
+        </Space>
+      }
+      style={{ borderRadius: 8 }}
+    >
+      {loading && allFiles.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 40 }}>
           <Spin size="large" />
           <div style={{ marginTop: 16 }}>
             <Text type="secondary">加载中...</Text>
           </div>
         </div>
-      ) : imageFiles.length === 0 ? (
-        <Empty description="该目录下没有图片文件" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      ) : allFiles.length === 0 ? (
+        <Empty description="该目录下没有文件" />
       ) : (
         <>
           <Row gutter={[16, 16]}>
-            {paginatedImages.map((file) => (
-              <Col xs={12} sm={8} md={6} key={file.sha}>
-                <Card
-                  hoverable
-                  size="small"
-                  cover={
-                    <div style={{ height: 160, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa' }}>
-                      <Image
-                        src={getImageUrl(file)}
-                        alt={file.name}
-                        style={{ maxHeight: 160, maxWidth: '100%', objectFit: 'contain' }}
-                        preview={true}
-                        fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZpbGw9IiNjY2MiIGZvbnQtc2l6ZT0iMTIiPuWKoOi9veWksei0pTwvdGV4dD48L3N2Zz4="
-                      />
-                    </div>
-                  }
-                  actions={[
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<SwapOutlined />}
-                      onClick={() => handleReplaceImage(file)}
-                      key="replace"
-                    >
-                      替换
-                    </Button>,
-                    <Popconfirm
-                      title="确认删除"
-                      description={`确定要删除 "${file.name}" 吗？`}
-                      onConfirm={() => handleDeleteImage(file)}
-                      okText="删除"
-                      cancelText="取消"
-                      okButtonProps={{ danger: true }}
-                      key="delete"
-                    >
-                      <Button
-                        type="text"
-                        size="small"
-                        danger
-                        icon={<DeleteOutlined />}
-                      >
-                        删除
-                      </Button>
-                    </Popconfirm>,
-                  ]}
-                >
-                  <Card.Meta
-                    description={
-                      <Text
-                        ellipsis={{ tooltip: file.name }}
-                        style={{ fontSize: 12 }}
-                      >
-                        {file.name}
-                      </Text>
-                    }
-                  />
-                </Card>
-              </Col>
-            ))}
+            {paginatedFiles.map((file) => renderFileCard(file))}
           </Row>
 
-          {imageFiles.length > PAGE_SIZE && (
+          {allFiles.length > PAGE_SIZE && (
             <div style={{ textAlign: 'center', marginTop: 24 }}>
               <Pagination
                 current={currentPage}
                 pageSize={PAGE_SIZE}
-                total={imageFiles.length}
+                total={allFiles.length}
                 onChange={(page) => setCurrentPage(page)}
                 showSizeChanger={false}
-                showTotal={(total) => `共 ${total} 张图片`}
+                showTotal={(total) => `共 ${total} 个文件`}
               />
             </div>
           )}
@@ -369,55 +395,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
         type="file"
         ref={replaceInputRef}
         style={{ display: 'none' }}
-        accept="image/*"
         onChange={handleReplaceFileSelected}
-      />
-    </>
-  );
-
-  return (
-    <Card
-      title={
-        <Space>
-          <Button type="text" icon={<ArrowLeftOutlined />} onClick={onBack} />
-          <FileTextOutlined />
-          <span>{repoConfig.label || `${repoConfig.owner}/${repoConfig.repo}`}</span>
-          <Tag color="geekblue">{repoConfig.path}</Tag>
-        </Space>
-      }
-      extra={
-        <Button icon={<ReloadOutlined />} onClick={loadFiles} loading={loading}>
-          刷新
-        </Button>
-      }
-      style={{ borderRadius: 8 }}
-    >
-      <Tabs
-        activeKey={activeTab}
-        onChange={(key) => {
-          setActiveTab(key);
-          if (key === 'images') setCurrentPage(1);
-        }}
-        items={[
-          {
-            key: 'json',
-            label: (
-              <span>
-                <FileTextOutlined /> JSON 文件
-              </span>
-            ),
-            children: renderJsonTab(),
-          },
-          {
-            key: 'images',
-            label: (
-              <span>
-                <PictureOutlined /> 图片管理
-              </span>
-            ),
-            children: renderImageTab(),
-          },
-        ]}
       />
     </Card>
   );
