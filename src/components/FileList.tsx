@@ -51,6 +51,8 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const [replacingFile, setReplacingFile] = useState<GitHubFile | null>(null);
 
+  const [refreshKey, setRefreshKey] = useState(0);
+
   const loadFiles = async () => {
     try {
       const files = await fetchAllFiles(repoConfig);
@@ -62,7 +64,13 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
 
   useEffect(() => {
     loadFiles();
-  }, [repoConfig]);
+  }, [repoConfig, refreshKey]);
+
+  const reloadAfterChange = async () => {
+    // GitHub Contents API has CDN cache; retry after short delay if needed
+    await loadFiles();
+    setTimeout(() => setRefreshKey((k) => k + 1), 2000);
+  };
 
   const formatSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
@@ -153,7 +161,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
         }
       }
       message.success('上传完成');
-      await loadFiles();
+      await reloadAfterChange();
     } catch (e) {
       message.error('上传失败: ' + (e as Error).message);
     } finally {
@@ -207,7 +215,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
         replacingFile.sha
       );
       message.success(`已替换 ${replacingFile.name}`);
-      await loadFiles();
+      await reloadAfterChange();
     } catch (err) {
       message.error('替换失败: ' + (err as Error).message);
     } finally {

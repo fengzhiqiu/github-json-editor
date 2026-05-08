@@ -18,6 +18,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('repos');
   const [selectedRepo, setSelectedRepo] = useState<RepoConfig | null>(null);
   const [selectedFile, setSelectedFile] = useState<GitHubFile | null>(null);
+  const [fileListKey, setFileListKey] = useState(0);
 
   if (loading) {
     return (
@@ -48,6 +49,7 @@ const App: React.FC = () => {
 
   const handleSelectRepo = (config: RepoConfig) => {
     setSelectedRepo(config);
+    setFileListKey((k) => k + 1);
     setCurrentView('files');
   };
 
@@ -64,6 +66,7 @@ const App: React.FC = () => {
 
   const handleBackToFiles = () => {
     setSelectedFile(null);
+    setFileListKey((k) => k + 1);
     setCurrentView('files');
   };
 
@@ -74,6 +77,7 @@ const App: React.FC = () => {
       case 'files':
         return selectedRepo ? (
           <FileList
+            key={fileListKey}
             repoConfig={selectedRepo}
             onSelectFile={handleSelectFile}
             onBack={handleBackToRepos}
