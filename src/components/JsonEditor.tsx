@@ -282,6 +282,20 @@ const ArrayEditor: React.FC<ArrayEditorProps> = ({ data, onChange }) => {
   const [addRawMode, setAddRawMode] = useState(false);
   const [addRawText, setAddRawText] = useState('');
   const [addRawErrors, setAddRawErrors] = useState<string[]>([]);
+  const [autoIncrementId, setAutoIncrementId] = useState(false);
+
+  // Detect if items have an "id" field with numeric values
+  const hasIdField = data.length > 0 &&
+    typeof data[0] === 'object' && !Array.isArray(data[0]) &&
+    'id' in data[0] && typeof data[0].id === 'number';
+
+  const getNextId = (): number => {
+    const maxId = data.reduce((max: number, item: any) => {
+      const id = typeof item?.id === 'number' ? item.id : 0;
+      return id > max ? id : max;
+    }, 0);
+    return maxId + 1;
+  };
 
   if (data.length === 0) {
     return (
@@ -378,8 +392,22 @@ const ArrayEditor: React.FC<ArrayEditorProps> = ({ data, onChange }) => {
 
     return (
       <Space direction="vertical" style={{ width: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <Text strong>共 {data.length} 项</Text>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <Space>
+            <Text strong>共 {data.length} 项</Text>
+            {hasIdField && (
+              <Tooltip title="新增时自动将 id 设为当前最大值 +1">
+                <Space size={4}>
+                  <Switch
+                    size="small"
+                    checked={autoIncrementId}
+                    onChange={setAutoIncrementId}
+                  />
+                  <Text type="secondary" style={{ fontSize: 12 }}>ID 自增</Text>
+                </Space>
+              </Tooltip>
+            )}
+          </Space>
           <Button
             type="primary"
             size="small"
@@ -438,6 +466,11 @@ const ArrayEditor: React.FC<ArrayEditorProps> = ({ data, onChange }) => {
                 message.error('数据不符合当前数组的 Schema');
                 return;
               }
+            }
+
+            // Auto-increment id for new items
+            if (autoIncrementId && editingItem.index >= data.length && typeof itemData === 'object' && itemData !== null) {
+              itemData = { ...itemData, id: getNextId() };
             }
 
             // Save
