@@ -222,7 +222,8 @@ export async function uploadImage(
   path: string,
   imageData: ArrayBuffer,
   message: string,
-  branch: string = 'main'
+  branch: string = 'main',
+  sha?: string
 ): Promise<CommitResult> {
   const octokit = getOctokit();
   const base64Content = btoa(
@@ -231,12 +232,78 @@ export async function uploadImage(
       .join('')
   );
 
-  const { data } = await octokit.repos.createOrUpdateFileContents({
+  const params: any = {
     owner,
     repo,
     path,
     message,
     content: base64Content,
+    branch,
+  };
+  if (sha) {
+    params.sha = sha;
+  }
+
+  const { data } = await octokit.repos.createOrUpdateFileContents(params);
+
+  return {
+    sha: data.commit.sha || '',
+    url: data.commit.html_url || '',
+  };
+}
+
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
+
+export function isImageFile(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+export async function listAllFiles(
+  owner: string,
+  repo: string,
+  path: string,
+  branch: string = 'main'
+): Promise<GitHubFile[]> {
+  const octokit = getOctokit();
+  const { data } = await octokit.repos.getContent({
+    owner,
+    repo,
+    path,
+    ref: branch,
+  });
+
+  if (!Array.isArray(data)) {
+    throw new Error('Path is not a directory');
+  }
+
+  return data
+    .filter((item) => item.type === 'file')
+    .map((item) => ({
+      name: item.name,
+      path: item.path,
+      sha: item.sha,
+      size: item.size || 0,
+      type: item.type as 'file' | 'dir',
+      download_url: item.download_url,
+    }));
+}
+
+export async function deleteFile(
+  owner: string,
+  repo: string,
+  path: string,
+  sha: string,
+  message: string,
+  branch: string = 'main'
+): Promise<CommitResult> {
+  const octokit = getOctokit();
+  const { data } = await octokit.repos.deleteFile({
+    owner,
+    repo,
+    path,
+    message,
+    sha,
     branch,
   });
 

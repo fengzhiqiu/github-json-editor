@@ -21,6 +21,21 @@ export function useGitHub() {
     }
   }, []);
 
+  const fetchAllFiles = useCallback(async (config: RepoConfig): Promise<GitHubFile[]> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const files = await github.listAllFiles(config.owner, config.repo, config.path, config.branch);
+      return files;
+    } catch (e) {
+      const msg = (e as Error).message;
+      setError(msg);
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const fetchFileContent = useCallback(
     async (owner: string, repo: string, path: string, branch: string): Promise<FileContent> => {
       setLoading(true);
@@ -72,12 +87,38 @@ export function useGitHub() {
       path: string,
       imageData: ArrayBuffer,
       message: string,
+      branch: string,
+      sha?: string
+    ): Promise<CommitResult> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await github.uploadImage(owner, repo, path, imageData, message, branch, sha);
+        return result;
+      } catch (e) {
+        const msg = (e as Error).message;
+        setError(msg);
+        throw e;
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
+  const deleteFile = useCallback(
+    async (
+      owner: string,
+      repo: string,
+      path: string,
+      sha: string,
+      message: string,
       branch: string
     ): Promise<CommitResult> => {
       setLoading(true);
       setError(null);
       try {
-        const result = await github.uploadImage(owner, repo, path, imageData, message, branch);
+        const result = await github.deleteFile(owner, repo, path, sha, message, branch);
         return result;
       } catch (e) {
         const msg = (e as Error).message;
@@ -94,8 +135,10 @@ export function useGitHub() {
     loading,
     error,
     fetchFiles,
+    fetchAllFiles,
     fetchFileContent,
     saveFile,
     uploadImage,
+    deleteFile,
   };
 }
