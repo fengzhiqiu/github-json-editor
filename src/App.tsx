@@ -162,9 +162,21 @@ const App: React.FC = () => {
         >
           {renderContent()}
         </Content>
+
+        <div style={{
+          textAlign: 'center',
+          padding: '12px',
+          fontSize: 11,
+          color: '#999',
+          borderTop: '1px solid #f0f0f0',
+        }}>
+          部署时间: {new Date(__BUILD_TIME__).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+        </div>
       </Layout>
     </ConfigProvider>
   );
 };
+
+declare const __BUILD_TIME__: string;
 
 export default App;
