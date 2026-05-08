@@ -29,7 +29,11 @@ export function inferSchema(data: unknown): JsonSchema {
   }
 
   if (Array.isArray(data)) {
-    const itemSchema = data.length > 0 ? inferSchema(data[0]) : { type: 'string' };
+    if (data.length === 0) {
+      return { type: 'array', items: { type: 'string' } };
+    }
+    // Merge schema from all items for better coverage
+    const itemSchema = inferItemSchema(data);
     return {
       type: 'array',
       items: itemSchema,
@@ -56,6 +60,43 @@ export function inferSchema(data: unknown): JsonSchema {
   }
 
   return { type: 'string' };
+}
+
+// Infer schema for array items by merging all items' properties
+function inferItemSchema(items: unknown[]): JsonSchema {
+  if (items.length === 0) return { type: 'string' };
+
+  // If items aren't objects, just use first item's type
+  if (typeof items[0] !== 'object' || items[0] === null || Array.isArray(items[0])) {
+    return inferSchema(items[0]);
+  }
+
+  // Merge all object keys to build a comprehensive schema
+  const allProperties: Record<string, JsonSchema> = {};
+  const keyCounts: Record<string, number> = {};
+
+  for (const item of items) {
+    if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+      for (const [key, value] of Object.entries(item as Record<string, unknown>)) {
+        if (!allProperties[key]) {
+          allProperties[key] = inferSchema(value);
+          keyCounts[key] = 0;
+        }
+        keyCounts[key]++;
+      }
+    }
+  }
+
+  // Keys present in all items are required
+  const required = Object.keys(keyCounts).filter(
+    (key) => keyCounts[key] === items.length
+  );
+
+  return {
+    type: 'object',
+    properties: allProperties,
+    ...(required.length > 0 ? { required } : {}),
+  };
 }
 
 export function parseJsonSafe(text: string): { data: unknown; error: string | null } {

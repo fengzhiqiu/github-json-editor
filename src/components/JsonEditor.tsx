@@ -30,7 +30,7 @@ import {
 } from '@ant-design/icons';
 import { RepoConfig, GitHubFile } from '../types';
 import { useGitHub } from '../hooks/useGitHub';
-import { inferSchema } from '../utils/validator';
+import { inferSchema, validateJson } from '../utils/validator';
 import RawEditor from './RawEditor';
 
 const { Title, Text } = Typography;
@@ -86,6 +86,30 @@ const JsonEditor: React.FC<JsonEditorProps> = ({ repoConfig, file, onBack }) => 
       message.error('JSON 格式错误，请修正后再保存');
       return;
     }
+
+    // Validate against schema inferred from original data
+    try {
+      const dataToValidate = activeTab === 'raw' ? JSON.parse(rawContent) : data;
+      const originalParsed = JSON.parse(originalContent);
+      const schema = inferSchema(originalParsed);
+      const { valid, errors } = validateJson(dataToValidate, schema);
+      if (!valid) {
+        Modal.error({
+          title: 'Schema 校验失败',
+          content: (
+            <div>
+              <p>数据结构不符合文件原始 Schema：</p>
+              <ul style={{ maxHeight: 200, overflow: 'auto' }}>
+                {errors.slice(0, 10).map((err, i) => (
+                  <li key={i} style={{ color: '#f5222d', fontSize: 12 }}>{err}</li>
+                ))}
+              </ul>
+            </div>
+          ),
+        });
+        return;
+      }
+    } catch {}
 
     const defaultMessage = `Update ${file.name}`;
     const finalMessage = commitMessage || defaultMessage;
@@ -255,6 +279,9 @@ interface ArrayEditorProps {
 
 const ArrayEditor: React.FC<ArrayEditorProps> = ({ data, onChange }) => {
   const [editingItem, setEditingItem] = useState<{ index: number; data: any } | null>(null);
+  const [addRawMode, setAddRawMode] = useState(false);
+  const [addRawText, setAddRawText] = useState('');
+  const [addRawErrors, setAddRawErrors] = useState<string[]>([]);
 
   if (data.length === 0) {
     return (
@@ -389,27 +416,107 @@ const ArrayEditor: React.FC<ArrayEditorProps> = ({ data, onChange }) => {
           title={editingItem && editingItem.index < data.length ? `编辑第 ${editingItem.index + 1} 项` : '新增项'}
           open={!!editingItem}
           onOk={() => {
-            if (editingItem) {
-              if (editingItem.index < data.length) {
-                const newData = [...data];
-                newData[editingItem.index] = editingItem.data;
-                onChange(newData);
-              } else {
-                onChange([...data, editingItem.data]);
+            if (!editingItem) return;
+
+            // Determine the data to save
+            let itemData = editingItem.data;
+            if (addRawMode) {
+              try {
+                itemData = JSON.parse(addRawText);
+              } catch (e) {
+                setAddRawErrors([`JSON 格式错误: ${(e as Error).message}`]);
+                return;
               }
-              setEditingItem(null);
             }
+
+            // Validate against inferred schema from existing items
+            if (data.length > 0) {
+              const itemSchema = inferSchema(data[0]);
+              const { valid, errors } = validateJson(itemData, itemSchema);
+              if (!valid) {
+                setAddRawErrors(errors);
+                message.error('数据不符合当前数组的 Schema');
+                return;
+              }
+            }
+
+            // Save
+            if (editingItem.index < data.length) {
+              const newData = [...data];
+              newData[editingItem.index] = itemData;
+              onChange(newData);
+            } else {
+              onChange([...data, itemData]);
+            }
+            setEditingItem(null);
+            setAddRawMode(false);
+            setAddRawText('');
+            setAddRawErrors([]);
           }}
-          onCancel={() => setEditingItem(null)}
+          onCancel={() => {
+            setEditingItem(null);
+            setAddRawMode(false);
+            setAddRawText('');
+            setAddRawErrors([]);
+          }}
           width={640}
           destroyOnClose
         >
           {editingItem && (
-            <ObjectEditor
-              data={editingItem.data}
-              onChange={(newData) => setEditingItem({ ...editingItem, data: newData })}
-              path=""
-            />
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                <Button
+                  size="small"
+                  type={addRawMode ? 'primary' : 'default'}
+                  icon={<CodeOutlined />}
+                  onClick={() => {
+                    if (!addRawMode) {
+                      // Switch to raw: serialize current data
+                      setAddRawText(JSON.stringify(editingItem.data, null, 2));
+                    } else {
+                      // Switch to form: parse raw text
+                      try {
+                        const parsed = JSON.parse(addRawText);
+                        setEditingItem({ ...editingItem, data: parsed });
+                      } catch {}
+                    }
+                    setAddRawMode(!addRawMode);
+                    setAddRawErrors([]);
+                  }}
+                >
+                  {addRawMode ? '表单模式' : 'JSON 模式'}
+                </Button>
+              </div>
+
+              {addRawMode ? (
+                <Input.TextArea
+                  value={addRawText}
+                  onChange={(e) => {
+                    setAddRawText(e.target.value);
+                    setAddRawErrors([]);
+                  }}
+                  autoSize={{ minRows: 8, maxRows: 20 }}
+                  placeholder='粘贴 JSON 对象，例如: {"name": "xxx", "value": 123}'
+                  style={{ fontFamily: 'monospace', fontSize: 13 }}
+                />
+              ) : (
+                <ObjectEditor
+                  data={editingItem.data}
+                  onChange={(newData) => setEditingItem({ ...editingItem, data: newData })}
+                  path=""
+                />
+              )}
+
+              {addRawErrors.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  {addRawErrors.map((err, i) => (
+                    <Text key={i} type="danger" style={{ display: 'block', fontSize: 12 }}>
+                      ❌ {err}
+                    </Text>
+                  ))}
+                </div>
+              )}
+            </Space>
           )}
         </Modal>
       </Space>
