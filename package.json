@@ -28,6 +28,6 @@
     "@vercel/node": "^5.7.15"
   },
   "engines": {
-    "node": "20.x"
+    "node": "18.x"
   }
 }
