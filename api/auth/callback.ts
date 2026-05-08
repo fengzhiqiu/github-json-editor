@@ -15,7 +15,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Exchange code for access token
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: {
@@ -36,8 +35,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const accessToken = tokenData.access_token;
-
-    // Redirect back to app with token
     return res.redirect(`/?token=${accessToken}`);
   } catch (error) {
     console.error('OAuth error:', error);
