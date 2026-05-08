@@ -109,9 +109,15 @@ const Login: React.FC<LoginProps> = ({ onLoginWithToken, onLoginWithOAuth, loadi
           showIcon
           style={{ marginTop: 24, borderRadius: 8 }}
         />
+
+        <div style={{ textAlign: 'center', marginTop: 24, fontSize: 11, color: '#999' }}>
+          部署时间: {new Date(__BUILD_TIME__).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+        </div>
       </Card>
     </div>
   );
 };
+
+declare const __BUILD_TIME__: string;
 
 export default Login;
