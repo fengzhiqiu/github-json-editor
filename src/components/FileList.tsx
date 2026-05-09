@@ -164,6 +164,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
 
     try {
       const basePath = currentFullPath.replace(/^\/+/, '');
+      let uploaded = 0;
       for (const { file, uploadName } of newFiles) {
         let arrayBuffer: ArrayBuffer;
 
@@ -184,6 +185,11 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
           `Upload: ${uploadName}`,
           repoConfig.branch
         );
+        uploaded++;
+        // Add delay between sequential uploads to avoid GitHub API conflicts
+        if (uploaded < newFiles.length) {
+          await new Promise((r) => setTimeout(r, 800));
+        }
       }
       message.success(`上传完成（${newFiles.length} 个文件）`);
       await reloadAfterChange();

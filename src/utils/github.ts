@@ -216,6 +216,11 @@ export async function createFile(
   };
 }
 
+// Delay helper
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function uploadImage(
   owner: string,
   repo: string,
@@ -235,45 +240,91 @@ export async function uploadImage(
   // GitHub API rejects paths starting with /
   const cleanPath = path.replace(/^\/+/, '');
 
-  const params: any = {
-    owner,
-    repo,
-    path: cleanPath,
-    message,
-    content: base64Content,
-    branch,
-  };
-  if (sha) {
-    params.sha = sha;
+  const MAX_RETRIES = 3;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const params: any = {
+      owner,
+      repo,
+      path: cleanPath,
+      message,
+      content: base64Content,
+      branch,
+    };
+    if (sha) {
+      params.sha = sha;
+    }
+
+    try {
+      const { data } = await octokit.repos.createOrUpdateFileContents(params);
+      return {
+        sha: data.commit.sha || '',
+        url: data.commit.html_url || '',
+      };
+    } catch (e: any) {
+      const status = e.status || e.response?.status;
+
+      // 409 Conflict: either git ref race or file already exists
+      if (status === 409) {
+        if (!sha) {
+          // Try fetching existing file sha
+          try {
+            const { data: existing } = await octokit.repos.getContent({
+              owner,
+              repo,
+              path: cleanPath,
+              ref: branch,
+            });
+            const existingSha = Array.isArray(existing) ? undefined : (existing as any).sha;
+            if (existingSha) {
+              sha = existingSha;
+              // Retry immediately with sha
+              continue;
+            }
+          } catch {
+            // File doesn't exist — this is a git ref race, retry with delay
+          }
+        }
+        // Git ref race condition — wait and retry
+        if (attempt < MAX_RETRIES) {
+          await delay(1000 * (attempt + 1)); // 1s, 2s, 3s
+          continue;
+        }
+      }
+
+      // 422 Unprocessable: often means the file exists (sha required) or ref conflict
+      if (status === 422) {
+        if (!sha) {
+          try {
+            const { data: existing } = await octokit.repos.getContent({
+              owner,
+              repo,
+              path: cleanPath,
+              ref: branch,
+            });
+            const existingSha = Array.isArray(existing) ? undefined : (existing as any).sha;
+            if (existingSha) {
+              sha = existingSha;
+              if (attempt < MAX_RETRIES) {
+                await delay(500);
+                continue;
+              }
+            }
+          } catch {
+            // File doesn't exist, might be a transient error
+          }
+        }
+        if (attempt < MAX_RETRIES) {
+          await delay(1000 * (attempt + 1));
+          continue;
+        }
+      }
+
+      throw e;
+    }
   }
 
-  try {
-    const { data } = await octokit.repos.createOrUpdateFileContents(params);
-    return {
-      sha: data.commit.sha || '',
-      url: data.commit.html_url || '',
-    };
-  } catch (e: any) {
-    // 409 Conflict: file already exists but sha not provided. Fetch sha and retry.
-    if (e.status === 409 && !sha) {
-      const { data: existing } = await octokit.repos.getContent({
-        owner,
-        repo,
-        path: cleanPath,
-        ref: branch,
-      });
-      const existingSha = Array.isArray(existing) ? undefined : (existing as any).sha;
-      if (existingSha) {
-        params.sha = existingSha;
-        const { data } = await octokit.repos.createOrUpdateFileContents(params);
-        return {
-          sha: data.commit.sha || '',
-          url: data.commit.html_url || '',
-        };
-      }
-    }
-    throw e;
-  }
+  throw new Error(`Failed to upload ${cleanPath} after ${MAX_RETRIES} retries`);
 }
 
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'];
