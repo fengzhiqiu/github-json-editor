@@ -14,6 +14,9 @@ import {
   Popconfirm,
   Pagination,
   Upload,
+  Modal,
+  Input,
+  Breadcrumb,
 } from 'antd';
 import {
   FileTextOutlined,
@@ -26,6 +29,9 @@ import {
   FileOutlined,
   FilePdfOutlined,
   FileMarkdownOutlined,
+  FolderOutlined,
+  FolderAddOutlined,
+  HomeFilled,
 } from '@ant-design/icons';
 import { RepoConfig, GitHubFile } from '../types';
 import { useGitHub } from '../hooks/useGitHub';
@@ -46,15 +52,27 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
   const [allFiles, setAllFiles] = useState<GitHubFile[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [uploading, setUploading] = useState(false);
-  const { loading, fetchAllFiles, uploadImage, deleteFile } = useGitHub();
+  const [subPath, setSubPath] = useState(''); // relative path from repoConfig.path
+  const [createDirVisible, setCreateDirVisible] = useState(false);
+  const [newDirName, setNewDirName] = useState('');
+  const [creatingDir, setCreatingDir] = useState(false);
+  const { loading, fetchAllFiles, uploadImage, deleteFile, createDirectory } = useGitHub();
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const [replacingFile, setReplacingFile] = useState<GitHubFile | null>(null);
 
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Compute the full current path
+  const currentFullPath = subPath
+    ? `${repoConfig.path.replace(/\/+$/, '')}/${subPath}`
+    : repoConfig.path;
+
   const loadFiles = async () => {
     try {
-      const files = await fetchAllFiles(repoConfig);
+      const files = await fetchAllFiles({
+        ...repoConfig,
+        path: currentFullPath,
+      } as RepoConfig);
       setAllFiles(files);
     } catch (e) {
       message.error('加载文件列表失败: ' + (e as Error).message);
@@ -63,10 +81,10 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
 
   useEffect(() => {
     loadFiles();
-  }, [repoConfig, refreshKey]);
+    setCurrentPage(1);
+  }, [repoConfig, refreshKey, subPath]);
 
   const reloadAfterChange = async () => {
-    // GitHub Contents API has CDN cache; retry after short delay if needed
     await loadFiles();
     setTimeout(() => setRefreshKey((k) => k + 1), 2000);
   };
@@ -90,15 +108,12 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
     return <FileOutlined style={{ fontSize: 48, color: '#999' }} />;
   };
 
-  // Sanitize filename: replace spaces/special chars, keep extension
   const sanitizeFilename = (name: string): string => {
     const lastDot = name.lastIndexOf('.');
     const ext = lastDot >= 0 ? name.slice(lastDot) : '';
     const base = lastDot >= 0 ? name.slice(0, lastDot) : name;
-    // Replace spaces, Chinese chars, and special chars with timestamp-based name
     const hasUnsafe = /[^\w.\-]/.test(base);
     if (hasUnsafe) {
-      // Generate a clean name: keep alphanumeric parts + timestamp
       const cleanBase = base.replace(/[^\w]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
       const suffix = Date.now().toString(36);
       return (cleanBase || 'file') + '-' + suffix + ext;
@@ -115,7 +130,6 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
     try {
       return await imageCompression(file, options);
     } catch {
-      // If compression fails (e.g. non-image), return original
       return file;
     }
   };
@@ -123,7 +137,6 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
   const handleUploadFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
 
-    // Filter out files that already exist locally (dedup by sanitized name)
     const existingNames = new Set(allFiles.map((f) => f.name));
     const newFiles: { file: File; uploadName: string }[] = [];
     const skippedNames: string[] = [];
@@ -150,11 +163,10 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
     setUploading(true);
 
     try {
-      const basePath = repoConfig.path.replace(/^\/+/, '');
+      const basePath = currentFullPath.replace(/^\/+/, '');
       for (const { file, uploadName } of newFiles) {
         let arrayBuffer: ArrayBuffer;
 
-        // Compress if it's an image
         if (isImageFile(file.name)) {
           const compressed = await compressImageFile(file);
           arrayBuffer = await compressed.arrayBuffer();
@@ -240,6 +252,64 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
     }
   };
 
+  // Navigate into a directory
+  const handleEnterDir = (dir: GitHubFile) => {
+    const relativePath = subPath ? `${subPath}/${dir.name}` : dir.name;
+    setSubPath(relativePath);
+  };
+
+  // Navigate via breadcrumb
+  const handleBreadcrumbClick = (pathIndex: number) => {
+    if (pathIndex < 0) {
+      setSubPath('');
+    } else {
+      const parts = subPath.split('/');
+      setSubPath(parts.slice(0, pathIndex + 1).join('/'));
+    }
+  };
+
+  // Create directory
+  const handleCreateDir = async () => {
+    const trimmed = newDirName.trim();
+    if (!trimmed) {
+      message.warning('目录名不能为空');
+      return;
+    }
+    if (/[\/\\:*?"<>|]/.test(trimmed)) {
+      message.warning('目录名包含非法字符');
+      return;
+    }
+    // Check if already exists
+    if (allFiles.some((f) => f.name === trimmed)) {
+      message.warning(`"${trimmed}" 已存在`);
+      return;
+    }
+
+    setCreatingDir(true);
+    try {
+      const basePath = currentFullPath.replace(/^\/+/, '');
+      const dirPath = basePath ? `${basePath}/${trimmed}` : trimmed;
+      await createDirectory(
+        repoConfig.owner,
+        repoConfig.repo,
+        dirPath,
+        `Create directory: ${trimmed}`,
+        repoConfig.branch
+      );
+      message.success(`目录 "${trimmed}" 创建成功`);
+      setCreateDirVisible(false);
+      setNewDirName('');
+      await reloadAfterChange();
+    } catch (e) {
+      message.error('创建目录失败: ' + (e as Error).message);
+    } finally {
+      setCreatingDir(false);
+    }
+  };
+
+  // Breadcrumb segments
+  const pathSegments = subPath ? subPath.split('/') : [];
+
   // Pagination
   const paginatedFiles = allFiles.slice(
     (currentPage - 1) * PAGE_SIZE,
@@ -247,8 +317,48 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
   );
 
   const renderFileCard = (file: GitHubFile) => {
-    const isImage = isImageFile(file.name);
-    const isJson = file.name.toLowerCase().endsWith('.json');
+    const isDir = file.type === 'dir';
+    const isImage = !isDir && isImageFile(file.name);
+    const isJson = !isDir && file.name.toLowerCase().endsWith('.json');
+
+    if (isDir) {
+      return (
+        <Col xs={12} sm={8} md={6} key={file.path}>
+          <Card
+            hoverable
+            size="small"
+            onClick={() => handleEnterDir(file)}
+            cover={
+              <div
+                style={{
+                  height: 160,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#f6f8fa',
+                  borderBottom: '1px solid #f0f0f0',
+                  cursor: 'pointer',
+                }}
+              >
+                <FolderOutlined style={{ fontSize: 56, color: '#faad14' }} />
+              </div>
+            }
+          >
+            <Card.Meta
+              description={
+                <Text
+                  ellipsis={{ tooltip: file.name }}
+                  style={{ fontSize: 12, fontWeight: 500 }}
+                >
+                  📁 {file.name}
+                </Text>
+              }
+            />
+          </Card>
+        </Col>
+      );
+    }
 
     return (
       <Col xs={12} sm={8} md={6} key={file.sha}>
@@ -347,12 +457,18 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
           <Button type="text" icon={<ArrowLeftOutlined />} onClick={onBack} />
           <FileTextOutlined />
           <span>{repoConfig.label || `${repoConfig.owner}/${repoConfig.repo}`}</span>
-          <Tag color="geekblue">{repoConfig.path}</Tag>
-          <Tag>{allFiles.length} 个文件</Tag>
+          <Tag color="geekblue">{currentFullPath}</Tag>
+          <Tag>{allFiles.length} 项</Tag>
         </Space>
       }
       extra={
         <Space>
+          <Button
+            icon={<FolderAddOutlined />}
+            onClick={() => setCreateDirVisible(true)}
+          >
+            创建目录
+          </Button>
           <Upload
             multiple
             showUploadList={false}
@@ -379,6 +495,26 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
       }
       style={{ borderRadius: 8 }}
     >
+      {/* Breadcrumb navigation */}
+      {pathSegments.length > 0 && (
+        <Breadcrumb style={{ marginBottom: 16 }}>
+          <Breadcrumb.Item>
+            <a onClick={() => handleBreadcrumbClick(-1)}>
+              <HomeFilled /> {repoConfig.path.split('/').pop() || 'root'}
+            </a>
+          </Breadcrumb.Item>
+          {pathSegments.map((seg, idx) => (
+            <Breadcrumb.Item key={idx}>
+              {idx === pathSegments.length - 1 ? (
+                <span>{seg}</span>
+              ) : (
+                <a onClick={() => handleBreadcrumbClick(idx)}>{seg}</a>
+              )}
+            </Breadcrumb.Item>
+          ))}
+        </Breadcrumb>
+      )}
+
       {loading && allFiles.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 40 }}>
           <Spin size="large" />
@@ -402,7 +538,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
                 total={allFiles.length}
                 onChange={(page) => setCurrentPage(page)}
                 showSizeChanger={false}
-                showTotal={(total) => `共 ${total} 个文件`}
+                showTotal={(total) => `共 ${total} 项`}
               />
             </div>
           )}
@@ -416,6 +552,28 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
         style={{ display: 'none' }}
         onChange={handleReplaceFileSelected}
       />
+
+      {/* Create directory modal */}
+      <Modal
+        title="创建目录"
+        open={createDirVisible}
+        onOk={handleCreateDir}
+        onCancel={() => { setCreateDirVisible(false); setNewDirName(''); }}
+        confirmLoading={creatingDir}
+        okText="创建"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 8 }}>
+          <Text type="secondary">在当前目录下创建新目录：{currentFullPath}/</Text>
+        </div>
+        <Input
+          placeholder="输入目录名称"
+          value={newDirName}
+          onChange={(e) => setNewDirName(e.target.value)}
+          onPressEnter={handleCreateDir}
+          autoFocus
+        />
+      </Modal>
     </Card>
   );
 };

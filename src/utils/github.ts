@@ -301,16 +301,49 @@ export async function listAllFiles(
     throw new Error('Path is not a directory');
   }
 
-  return data
-    .filter((item) => item.type === 'file')
-    .map((item) => ({
-      name: item.name,
-      path: item.path,
-      sha: item.sha,
-      size: item.size || 0,
-      type: item.type as 'file' | 'dir',
-      download_url: item.download_url,
-    }));
+  // Return both files and directories, dirs first
+  const items = data.map((item) => ({
+    name: item.name,
+    path: item.path,
+    sha: item.sha,
+    size: item.size || 0,
+    type: item.type as 'file' | 'dir',
+    download_url: item.download_url,
+  }));
+
+  // Sort: directories first, then files
+  items.sort((a, b) => {
+    if (a.type === 'dir' && b.type !== 'dir') return -1;
+    if (a.type !== 'dir' && b.type === 'dir') return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return items;
+}
+
+export async function createDirectory(
+  owner: string,
+  repo: string,
+  dirPath: string,
+  message: string,
+  branch: string = 'main'
+): Promise<CommitResult> {
+  // GitHub doesn't have a "create directory" API — we create a .gitkeep file inside
+  const keepPath = `${dirPath.replace(/\/+$/, '')}/.gitkeep`;
+  const octokit = getOctokit();
+  const { data } = await octokit.repos.createOrUpdateFileContents({
+    owner,
+    repo,
+    path: keepPath,
+    message,
+    content: '', // empty file
+    branch,
+  });
+
+  return {
+    sha: data.commit.sha || '',
+    url: data.commit.html_url || '',
+  };
 }
 
 export async function deleteFile(

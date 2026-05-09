@@ -131,6 +131,30 @@ export function useGitHub() {
     []
   );
 
+  const createDirectory = useCallback(
+    async (
+      owner: string,
+      repo: string,
+      dirPath: string,
+      message: string,
+      branch: string
+    ): Promise<CommitResult> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await github.createDirectory(owner, repo, dirPath, message, branch);
+        return result;
+      } catch (e) {
+        const msg = (e as Error).message;
+        setError(msg);
+        throw e;
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
   return {
     loading,
     error,
@@ -140,5 +164,6 @@ export function useGitHub() {
     saveFile,
     uploadImage,
     deleteFile,
+    createDirectory,
   };
 }
