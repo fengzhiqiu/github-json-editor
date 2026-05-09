@@ -6,12 +6,13 @@ import Login from './components/Login';
 import RepoSelector from './components/RepoSelector';
 import FileList from './components/FileList';
 import JsonEditor from './components/JsonEditor';
+import SceneEditor from './components/SceneEditor';
 import { RepoConfig, GitHubFile } from './types';
 
 const { Header, Content } = Layout;
 const { Title } = Typography;
 
-type View = 'repos' | 'files' | 'editor';
+type View = 'repos' | 'files' | 'editor' | 'scene-editor';
 
 const App: React.FC = () => {
   const { token, user, loading, loginWithToken, loginWithOAuth, logout } = useAuth();
@@ -70,6 +71,10 @@ const App: React.FC = () => {
     setCurrentView('files');
   };
 
+  const handleOpenSceneEditor = () => {
+    setCurrentView('scene-editor');
+  };
+
   const renderContent = () => {
     switch (currentView) {
       case 'repos':
@@ -81,6 +86,7 @@ const App: React.FC = () => {
             repoConfig={selectedRepo}
             onSelectFile={handleSelectFile}
             onBack={handleBackToRepos}
+            onOpenSceneEditor={handleOpenSceneEditor}
           />
         ) : null;
       case 'editor':
@@ -88,6 +94,13 @@ const App: React.FC = () => {
           <JsonEditor
             repoConfig={selectedRepo}
             file={selectedFile}
+            onBack={handleBackToFiles}
+          />
+        ) : null;
+      case 'scene-editor':
+        return selectedRepo ? (
+          <SceneEditor
+            repoConfig={selectedRepo}
             onBack={handleBackToFiles}
           />
         ) : null;

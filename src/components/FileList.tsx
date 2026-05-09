@@ -44,11 +44,12 @@ interface FileListProps {
   repoConfig: RepoConfig;
   onSelectFile: (file: GitHubFile) => void;
   onBack: () => void;
+  onOpenSceneEditor?: () => void;
 }
 
 const PAGE_SIZE = 20;
 
-const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack }) => {
+const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, onOpenSceneEditor }) => {
   const [allFiles, setAllFiles] = useState<GitHubFile[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [uploading, setUploading] = useState(false);
@@ -62,6 +63,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
   const [replacingFile, setReplacingFile] = useState<GitHubFile | null>(null);
 
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showSceneButton, setShowSceneButton] = useState(false);
 
   // Compute the full current path
   const currentFullPath = subPath
@@ -75,6 +77,12 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
         path: currentFullPath,
       } as RepoConfig);
       setAllFiles(files);
+
+      // Detect CDN scene structure
+      const isCdnRepo = repoConfig.owner === 'techinsblog' && repoConfig.repo === 'cdn';
+      const hasSceneIndex = files.some((f) => f.name === 'scenes-index.json');
+      const isEnDataPath = currentFullPath.startsWith('en/data') || currentFullPath === 'en/data';
+      setShowSceneButton((isCdnRepo && isEnDataPath) || hasSceneIndex);
     } catch (e) {
       message.error('加载文件列表失败: ' + (e as Error).message);
     }
@@ -478,7 +486,16 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
         </Space>
       }
       extra={
-        <Space>
+        <Space wrap>
+          {showSceneButton && onOpenSceneEditor && (
+            <Button
+              type="primary"
+              style={{ background: '#722ed1', borderColor: '#722ed1' }}
+              onClick={onOpenSceneEditor}
+            >
+              ✨ 新增场景
+            </Button>
+          )}
           <Button
             icon={<FolderAddOutlined />}
             onClick={() => setCreateDirVisible(true)}
