@@ -52,6 +52,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
   const [allFiles, setAllFiles] = useState<GitHubFile[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   const [subPath, setSubPath] = useState(''); // relative path from repoConfig.path
   const [createDirVisible, setCreateDirVisible] = useState(false);
   const [newDirName, setNewDirName] = useState('');
@@ -161,13 +162,17 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
     }
 
     setUploading(true);
+    setUploadProgress(`0/${newFiles.length}`);
 
     try {
       const basePath = currentFullPath.replace(/^\/+/, '');
       let uploaded = 0;
-      for (const { file, uploadName } of newFiles) {
-        let arrayBuffer: ArrayBuffer;
+      const total = newFiles.length;
 
+      for (const { file, uploadName } of newFiles) {
+        setUploadProgress(`${uploaded + 1}/${total} ${uploadName}`);
+
+        let arrayBuffer: ArrayBuffer;
         if (isImageFile(file.name)) {
           const compressed = await compressImageFile(file);
           arrayBuffer = await compressed.arrayBuffer();
@@ -186,17 +191,22 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
           repoConfig.branch
         );
         uploaded++;
-        // Add delay between sequential uploads to avoid GitHub API conflicts
-        if (uploaded < newFiles.length) {
-          await new Promise((r) => setTimeout(r, 800));
+
+        // Queue interval: wait for GitHub to process the commit before next upload
+        // Longer wait for more files to avoid compounding conflicts
+        if (uploaded < total) {
+          const waitMs = total > 5 ? 1500 : 1000;
+          setUploadProgress(`${uploaded}/${total} ✓ 等待队列...`);
+          await new Promise((r) => setTimeout(r, waitMs));
         }
       }
-      message.success(`上传完成（${newFiles.length} 个文件）`);
+      message.success(`上传完成（${total} 个文件）`);
       await reloadAfterChange();
     } catch (e) {
       message.error('上传失败: ' + (e as Error).message);
     } finally {
       setUploading(false);
+      setUploadProgress('');
     }
   };
 
@@ -491,7 +501,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack })
               icon={<UploadOutlined />}
               loading={uploading}
             >
-              上传文件
+              {uploading && uploadProgress ? uploadProgress : '上传文件'}
             </Button>
           </Upload>
           <Button icon={<ReloadOutlined />} onClick={loadFiles} loading={loading}>
