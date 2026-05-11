@@ -31,7 +31,7 @@ const DIFY_BASE_URL = 'https://api.dify.ai/v1';
 const DIFY_API_KEY_STORAGE = 'dify-scene-generator-api-key';
 
 // CDN base (jsDelivr mirror)
-const CDN_BASE = 'https://cdn.jsdmirror.com/gh/fengzhiqiu/scene-vocab-app@redesign-v2/cdn-out';
+const CDN_BASE = 'https://cdn.jsdmirror.com/gh/techinsblog/cdn/en';
 
 const CATEGORIES = ['日常', '治愈', '旅行', '日常出行', '美食', '运动'];
 
@@ -179,7 +179,7 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
       }
 
       // Fetch scene JSON from CDN (with cache buster)
-      const jsonUrl = `${CDN_BASE}/scenes/${sceneId}.json?_t=${Date.now()}`;
+      const jsonUrl = `${CDN_BASE}/data/scenes/${sceneId}.json?_t=${Date.now()}`;
       
       // CDN might need a few seconds to propagate; retry
       let sceneJson: SceneData | null = null;
@@ -199,7 +199,7 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
 
       if (!sceneJson) {
         // Fallback: try GitHub raw directly
-        const rawUrl = `https://raw.githubusercontent.com/fengzhiqiu/scene-vocab-app/redesign-v2/cdn-out/scenes/${sceneId}.json`;
+        const rawUrl = `https://raw.githubusercontent.com/techinsblog/cdn/main/en/data/scenes/${sceneId}.json`;
         const rawRes = await fetch(rawUrl);
         if (rawRes.ok) {
           sceneJson = await rawRes.json();
