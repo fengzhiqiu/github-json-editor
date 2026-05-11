@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   Button,
   Space,
@@ -17,6 +17,65 @@ const { Text } = Typography;
 const { Panel } = Collapse;
 
 const CDN_BASE = 'https://cdn.jsdmirror.com/gh/techinsblog/cdn/en';
+
+/**
+ * Deconflict word-bubble positions to avoid overlapping.
+ * Works in percentage coordinate space (0-100 for both axes).
+ * Each label is approximated as a rectangle of `labelW x labelH` percent units.
+ */
+function deconflictPositions(
+  words: Array<{ id: string; position: { x: number; y: number } }>,
+  labelW = 18,   // estimated label width in % of container
+  labelH = 8,    // estimated label height in % of container
+  maxIter = 60
+): Map<string, { x: number; y: number }> {
+  const pos = new Map(words.map((w) => [w.id, { x: w.position.x, y: w.position.y }]));
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    let anyOverlap = false;
+
+    for (let i = 0; i < words.length; i++) {
+      for (let j = i + 1; j < words.length; j++) {
+        const a = pos.get(words[i].id)!;
+        const b = pos.get(words[j].id)!;
+
+        const overlapX = Math.abs(a.x - b.x) < labelW;
+        const overlapY = Math.abs(a.y - b.y) < labelH;
+
+        if (overlapX && overlapY) {
+          anyOverlap = true;
+          // Push apart along the axis with less overlap
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+
+          // Prefer vertical separation (labels tend to be wider than tall)
+          const pushY = (labelH - Math.abs(dy)) / 2 + 1;
+          const pushX = (labelW - Math.abs(dx)) / 2 + 1;
+
+          if (Math.abs(dy) * (labelW / labelH) <= Math.abs(dx)) {
+            // separate vertically
+            const signY = dy >= 0 ? 1 : -1;
+            pos.set(words[i].id, { ...a, y: clamp(a.y + signY * pushY, 5, 95) });
+            pos.set(words[j].id, { ...b, y: clamp(b.y - signY * pushY, 5, 95) });
+          } else {
+            // separate horizontally
+            const signX = dx >= 0 ? 1 : -1;
+            pos.set(words[i].id, { ...a, x: clamp(a.x + signX * pushX, 5, 95) });
+            pos.set(words[j].id, { ...b, x: clamp(b.x - signX * pushX, 5, 95) });
+          }
+        }
+      }
+    }
+
+    if (!anyOverlap) break;
+  }
+
+  return pos;
+}
+
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v));
+}
 
 export interface SceneData {
   id: number;
@@ -53,6 +112,12 @@ interface ScenePreviewProps {
 const ScenePreview: React.FC<ScenePreviewProps> = ({ sceneData, imageUrl, audioUrl }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Pre-compute deconflicted label positions
+  const labelPositions = useMemo(
+    () => deconflictPositions(sceneData.words),
+    [sceneData.id]
+  );
 
   // Derive URLs from scene data if not provided
   const resolvedImageUrl = imageUrl
@@ -173,30 +238,33 @@ const ScenePreview: React.FC<ScenePreviewProps> = ({ sceneData, imageUrl, audioU
             zIndex: 3,
           }}
         >
-          {sceneData.words.map((word) => (
-            <div
-              key={word.id}
-              style={{
-                position: 'absolute',
-                left: `${word.position.x}%`,
-                top: `${word.position.y}%`,
-                transform: 'translate(-50%, -50%)',
-                background: 'rgba(255,255,255,0.92)',
-                backdropFilter: 'blur(16px)',
-                borderRadius: 17,
-                padding: '6px 14px',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
-                fontSize: 13,
-                fontWeight: 700,
-                color: '#3a3a3a',
-                whiteSpace: 'nowrap',
-                fontFamily: 'Georgia, serif',
-                fontStyle: 'italic',
-              }}
-            >
-              {word.text}
-            </div>
-          ))}
+          {sceneData.words.map((word) => {
+            const pos = labelPositions.get(word.id) || word.position;
+            return (
+              <div
+                key={word.id}
+                style={{
+                  position: 'absolute',
+                  left: `${pos.x}%`,
+                  top: `${pos.y}%`,
+                  transform: 'translate(-50%, -50%)',
+                  background: 'rgba(255,255,255,0.92)',
+                  backdropFilter: 'blur(16px)',
+                  borderRadius: 17,
+                  padding: '6px 14px',
+                  boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: '#3a3a3a',
+                  whiteSpace: 'nowrap',
+                  fontFamily: 'Georgia, serif',
+                  fontStyle: 'italic',
+                }}
+              >
+                {word.text}
+              </div>
+            );
+          })}
         </div>
 
         {/* Bottom sentence area */}
