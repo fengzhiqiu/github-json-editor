@@ -17,6 +17,7 @@ import {
   Modal,
   Input,
   Breadcrumb,
+  Dropdown,
 } from 'antd';
 import {
   FileTextOutlined,
@@ -32,6 +33,7 @@ import {
   FolderOutlined,
   FolderAddOutlined,
   HomeFilled,
+  EllipsisOutlined,
 } from '@ant-design/icons';
 import { RepoConfig, GitHubFile } from '../types';
 import { useGitHub } from '../hooks/useGitHub';
@@ -588,90 +590,109 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
               )}
             </div>
           }
-          actions={[
-            ...(isJson && isInScenesDir && file.name !== 'scenes-index.json'
-              ? [
-                  <Button
-                    type="text"
-                    icon={<EyeOutlined />}
-                    onClick={() => handlePreviewScene(file)}
-                    key="preview"
-                    style={{ color: '#1677ff' }}
-                  >
-                    预览
-                  </Button>,
-                ]
-              : []),
-            ...(isJson
-              ? [
-                  <Button
-                    type="text"
-                    icon={<EditOutlined />}
-                    onClick={() => onSelectFile(file, subPath)}
-                    key="edit"
-                  >
-                    编辑
-                  </Button>,
-                ]
-              : []),
-            <Button
-              type="text"
-              icon={<EditOutlined />}
-              onClick={() => handleOpenRename(file)}
-              key="rename"
-              style={{ color: '#722ed1' }}
-            >
-              改名
-            </Button>,
-            <Button
-              type="text"
-              icon={<SwapOutlined />}
-              onClick={() => handleReplaceFile(file)}
-              key="replace"
-            >
-              替换
-            </Button>,
-            ...(isInScenesDir && isJson && file.name !== 'scenes-index.json' && file.name.match(/^\d+\.json$/)
-              ? [
-                  <Popconfirm
-                    title="删除整个场景"
-                    description={`将同步删除 JSON、图片、音频文件，并从索引中移除。确定要删除场景 "${file.name}" 吗？`}
-                    onConfirm={() => handleDeleteScene(file)}
-                    okText="删除场景"
-                    cancelText="取消"
-                    okButtonProps={{ danger: true, loading: deletingScene }}
-                    key="delete-scene"
-                  >
+          actions={(() => {
+            const isSceneFile = isInScenesDir && isJson && file.name !== 'scenes-index.json' && !!file.name.match(/^\d+\.json$/);
+
+            // "More" dropdown items
+            const moreItems = [
+              {
+                key: 'rename',
+                icon: <EditOutlined style={{ color: '#722ed1' }} />,
+                label: <span style={{ color: '#722ed1' }}>改名</span>,
+                onClick: () => handleOpenRename(file),
+              },
+              {
+                key: 'replace',
+                icon: <SwapOutlined />,
+                label: '替换',
+                onClick: () => handleReplaceFile(file),
+              },
+              { type: 'divider' as const },
+              ...(isSceneFile
+                ? [{
+                    key: 'delete-scene',
+                    icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
+                    label: (
+                      <Popconfirm
+                        title="删除整个场景"
+                        description="将同步删除 JSON、图片、音频，并从索引中移除"
+                        onConfirm={() => handleDeleteScene(file)}
+                        okText="删除场景"
+                        cancelText="取消"
+                        okButtonProps={{ danger: true, loading: deletingScene }}
+                        // stop dropdown from closing before confirm
+                        onPopupClick={(e) => e.stopPropagation()}
+                      >
+                        <span style={{ color: '#ff4d4f' }}>删除场景</span>
+                      </Popconfirm>
+                    ),
+                  }]
+                : [{
+                    key: 'delete',
+                    icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
+                    label: (
+                      <Popconfirm
+                        title="确认删除"
+                        description={`确定要删除 "${file.name}" 吗？`}
+                        onConfirm={() => handleDeleteFile(file)}
+                        okText="删除"
+                        cancelText="取消"
+                        okButtonProps={{ danger: true }}
+                        onPopupClick={(e) => e.stopPropagation()}
+                      >
+                        <span style={{ color: '#ff4d4f' }}>删除</span>
+                      </Popconfirm>
+                    ),
+                  }]
+              ),
+            ];
+
+            return [
+              // Primary actions (scene: 预览 + 编辑; image: nothing; others: 编辑)
+              ...(isSceneFile
+                ? [
                     <Button
                       type="text"
-                      danger
-                      icon={<DeleteOutlined />}
+                      icon={<EyeOutlined />}
+                      onClick={() => handlePreviewScene(file)}
+                      key="preview"
+                      style={{ color: '#1677ff' }}
                     >
-                      删除场景
-                    </Button>
-                  </Popconfirm>,
-                ]
-              : [
-                  <Popconfirm
-                    title="确认删除"
-                    description={`确定要删除 "${file.name}" 吗？`}
-                    onConfirm={() => handleDeleteFile(file)}
-                    okText="删除"
-                    cancelText="取消"
-                    okButtonProps={{ danger: true }}
-                    key="delete"
-                  >
+                      预览
+                    </Button>,
                     <Button
                       type="text"
-                      danger
-                      icon={<DeleteOutlined />}
+                      icon={<EditOutlined />}
+                      onClick={() => onSelectFile(file, subPath)}
+                      key="edit"
                     >
-                      删除
-                    </Button>
-                  </Popconfirm>,
-                ]
-            ),
-          ]}
+                      编辑
+                    </Button>,
+                  ]
+                : isJson
+                  ? [
+                      <Button
+                        type="text"
+                        icon={<EditOutlined />}
+                        onClick={() => onSelectFile(file, subPath)}
+                        key="edit"
+                      >
+                        编辑
+                      </Button>,
+                    ]
+                  : []
+              ),
+              // "More" button
+              <Dropdown
+                key="more"
+                menu={{ items: moreItems }}
+                trigger={['click']}
+                placement="bottomRight"
+              >
+                <Button type="text" icon={<EllipsisOutlined />} />
+              </Dropdown>,
+            ];
+          })()}
         >
           <Card.Meta
             description={
