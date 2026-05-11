@@ -7,12 +7,13 @@ import RepoSelector from './components/RepoSelector';
 import FileList from './components/FileList';
 import JsonEditor from './components/JsonEditor';
 import SceneEditor from './components/SceneEditor';
+import DifyGenerator from './components/DifyGenerator';
 import { RepoConfig, GitHubFile } from './types';
 
 const { Header, Content } = Layout;
 const { Title } = Typography;
 
-type View = 'repos' | 'files' | 'editor' | 'scene-editor';
+type View = 'repos' | 'files' | 'editor' | 'scene-editor' | 'dify-generator';
 
 const App: React.FC = () => {
   const { token, user, loading, loginWithToken, loginWithOAuth, logout } = useAuth();
@@ -78,6 +79,10 @@ const App: React.FC = () => {
     setCurrentView('scene-editor');
   };
 
+  const handleOpenDifyGenerator = () => {
+    setCurrentView('dify-generator');
+  };
+
   const renderContent = () => {
     switch (currentView) {
       case 'repos':
@@ -90,6 +95,7 @@ const App: React.FC = () => {
             onSelectFile={handleSelectFile}
             onBack={handleBackToRepos}
             onOpenSceneEditor={handleOpenSceneEditor}
+            onOpenDifyGenerator={handleOpenDifyGenerator}
             initialSubPath={fileListSubPath}
             onSubPathChange={setFileListSubPath}
           />
@@ -109,6 +115,12 @@ const App: React.FC = () => {
             onBack={handleBackToFiles}
           />
         ) : null;
+      case 'dify-generator':
+        return (
+          <DifyGenerator
+            onBack={handleBackToFiles}
+          />
+        );
       default:
         return null;
     }

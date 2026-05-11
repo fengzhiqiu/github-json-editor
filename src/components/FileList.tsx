@@ -45,13 +45,14 @@ interface FileListProps {
   onSelectFile: (file: GitHubFile, subPath?: string) => void;
   onBack: () => void;
   onOpenSceneEditor?: () => void;
+  onOpenDifyGenerator?: () => void;
   initialSubPath?: string;
   onSubPathChange?: (subPath: string) => void;
 }
 
 const PAGE_SIZE = 20;
 
-const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, onOpenSceneEditor, initialSubPath, onSubPathChange }) => {
+const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, onOpenSceneEditor, onOpenDifyGenerator, initialSubPath, onSubPathChange }) => {
   const [allFiles, setAllFiles] = useState<GitHubFile[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [uploading, setUploading] = useState(false);
@@ -564,6 +565,14 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
               onClick={onOpenSceneEditor}
             >
               ✨ 新增场景
+            </Button>
+          )}
+          {showSceneButton && onOpenDifyGenerator && (
+            <Button
+              type="primary"
+              onClick={onOpenDifyGenerator}
+            >
+              🚀 AI 生成
             </Button>
           )}
           <Button
