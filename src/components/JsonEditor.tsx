@@ -51,6 +51,7 @@ const JsonEditor: React.FC<JsonEditorProps> = ({ repoConfig, file, onBack }) => 
   const [rawValid, setRawValid] = useState(true);
   const [activeTab, setActiveTab] = useState('visual');
   const [commitMessage, setCommitMessage] = useState('');
+  const [schemaValidation, setSchemaValidation] = useState(true);
 
   const { fetchFileContent, saveFile } = useGitHub();
 
@@ -87,29 +88,31 @@ const JsonEditor: React.FC<JsonEditorProps> = ({ repoConfig, file, onBack }) => 
       return;
     }
 
-    // Validate against schema inferred from original data
-    try {
-      const dataToValidate = activeTab === 'raw' ? JSON.parse(rawContent) : data;
-      const originalParsed = JSON.parse(originalContent);
-      const schema = inferSchema(originalParsed);
-      const { valid, errors } = validateJson(dataToValidate, schema);
-      if (!valid) {
-        Modal.error({
-          title: 'Schema 校验失败',
-          content: (
-            <div>
-              <p>数据结构不符合文件原始 Schema：</p>
-              <ul style={{ maxHeight: 200, overflow: 'auto' }}>
-                {errors.slice(0, 10).map((err, i) => (
-                  <li key={i} style={{ color: '#f5222d', fontSize: 12 }}>{err}</li>
-                ))}
-              </ul>
-            </div>
-          ),
-        });
-        return;
-      }
-    } catch {}
+    // Validate against schema inferred from original data (when enabled)
+    if (schemaValidation) {
+      try {
+        const dataToValidate = activeTab === 'raw' ? JSON.parse(rawContent) : data;
+        const originalParsed = JSON.parse(originalContent);
+        const schema = inferSchema(originalParsed);
+        const { valid, errors } = validateJson(dataToValidate, schema);
+        if (!valid) {
+          Modal.error({
+            title: 'Schema 校验失败',
+            content: (
+              <div>
+                <p>数据结构不符合文件原始 Schema：</p>
+                <ul style={{ maxHeight: 200, overflow: 'auto' }}>
+                  {errors.slice(0, 10).map((err, i) => (
+                    <li key={i} style={{ color: '#f5222d', fontSize: 12 }}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            ),
+          });
+          return;
+        }
+      } catch {}
+    }
 
     const defaultMessage = `Update ${file.name}`;
     const finalMessage = commitMessage || defaultMessage;
@@ -179,6 +182,18 @@ const JsonEditor: React.FC<JsonEditorProps> = ({ repoConfig, file, onBack }) => 
         }
         extra={
           <Space>
+            <Tooltip title="开启后保存时自动校验数据结构是否符合原始 Schema">
+              <Space size={4}>
+                <Switch
+                  size="small"
+                  checked={schemaValidation}
+                  onChange={setSchemaValidation}
+                />
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Schema 校验
+                </Text>
+              </Space>
+            </Tooltip>
             <Input
               placeholder="Commit message (可选)"
               value={commitMessage}
@@ -210,7 +225,7 @@ const JsonEditor: React.FC<JsonEditorProps> = ({ repoConfig, file, onBack }) => 
                 </Space>
               ),
               children: (
-                <VisualEditor data={data} onChange={handleDataChange} />
+                <VisualEditor data={data} onChange={handleDataChange} schemaValidation={schemaValidation} />
               ),
             },
             {
@@ -241,15 +256,16 @@ const JsonEditor: React.FC<JsonEditorProps> = ({ repoConfig, file, onBack }) => 
 interface VisualEditorProps {
   data: any;
   onChange: (data: any) => void;
+  schemaValidation?: boolean;
 }
 
-const VisualEditor: React.FC<VisualEditorProps> = ({ data, onChange }) => {
+const VisualEditor: React.FC<VisualEditorProps> = ({ data, onChange, schemaValidation = true }) => {
   if (data === null || data === undefined) {
     return <Text type="secondary">文件内容为空</Text>;
   }
 
   if (Array.isArray(data)) {
-    return <ArrayEditor data={data} onChange={onChange} />;
+    return <ArrayEditor data={data} onChange={onChange} schemaValidation={schemaValidation} />;
   }
 
   if (typeof data === 'object') {
@@ -275,9 +291,10 @@ const VisualEditor: React.FC<VisualEditorProps> = ({ data, onChange }) => {
 interface ArrayEditorProps {
   data: any[];
   onChange: (data: any[]) => void;
+  schemaValidation?: boolean;
 }
 
-const ArrayEditor: React.FC<ArrayEditorProps> = ({ data, onChange }) => {
+const ArrayEditor: React.FC<ArrayEditorProps> = ({ data, onChange, schemaValidation = true }) => {
   const [editingItem, setEditingItem] = useState<{ index: number; data: any } | null>(null);
   const [addRawMode, setAddRawMode] = useState(false);
   const [addRawText, setAddRawText] = useState('');
@@ -457,8 +474,8 @@ const ArrayEditor: React.FC<ArrayEditorProps> = ({ data, onChange }) => {
               }
             }
 
-            // Validate against inferred schema from existing items
-            if (data.length > 0) {
+            // Validate against inferred schema from existing items (when enabled)
+            if (schemaValidation && data.length > 0) {
               const itemSchema = inferSchema(data[0]);
               const { valid, errors } = validateJson(itemData, itemSchema);
               if (!valid) {
