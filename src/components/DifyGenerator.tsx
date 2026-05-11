@@ -131,7 +131,15 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
       setProgress('正在调用 AI 工作流生成场景数据...');
 
       // Step 2: Run workflow
-      const inputs: Record<string, any> = { category };
+      // The start node has a file-type variable "image" — pass the uploaded file ref via inputs
+      const inputs: Record<string, any> = {
+        image: {
+          type: 'image',
+          transfer_method: 'local_file',
+          upload_file_id: fileId,
+        },
+      };
+      if (category) inputs.category = category;
       if (title.trim()) inputs.title = title.trim();
 
       const runRes = await fetch(`${DIFY_BASE_URL}/workflows/run`, {
@@ -144,13 +152,6 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
           inputs,
           response_mode: 'blocking',
           user: 'json-editor',
-          files: [
-            {
-              type: 'image',
-              transfer_method: 'local_file',
-              upload_file_id: fileId,
-            },
-          ],
         }),
       });
 
