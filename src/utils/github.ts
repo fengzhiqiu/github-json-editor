@@ -420,3 +420,61 @@ export async function deleteFile(
     url: data.commit.html_url || '',
   };
 }
+
+/**
+ * Rename a file by creating it at the new path and deleting the old one.
+ * Uses a single-branch ref to minimize race conditions.
+ */
+export async function renameFile(
+  owner: string,
+  repo: string,
+  oldPath: string,
+  newPath: string,
+  message: string,
+  branch: string = 'main'
+): Promise<CommitResult> {
+  const octokit = getOctokit();
+
+  // 1. Get existing file content + sha
+  const { data: fileData } = await octokit.repos.getContent({
+    owner,
+    repo,
+    path: oldPath,
+    ref: branch,
+  });
+
+  if (Array.isArray(fileData) || fileData.type !== 'file') {
+    throw new Error('Path is not a file');
+  }
+
+  const content = (fileData as any).content as string;
+  const oldSha = fileData.sha;
+
+  // 2. Create file at new path
+  await octokit.repos.createOrUpdateFileContents({
+    owner,
+    repo,
+    path: newPath,
+    message: message + ' (create)',
+    content: content.replace(/\n/g, ''), // base64 without newlines
+    branch,
+  });
+
+  // Small delay to let GitHub process
+  await delay(500);
+
+  // 3. Delete old file
+  const { data: delData } = await octokit.repos.deleteFile({
+    owner,
+    repo,
+    path: oldPath,
+    message: message + ' (remove old)',
+    sha: oldSha,
+    branch,
+  });
+
+  return {
+    sha: delData.commit.sha || '',
+    url: delData.commit.html_url || '',
+  };
+}

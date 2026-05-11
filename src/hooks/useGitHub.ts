@@ -155,6 +155,31 @@ export function useGitHub() {
     []
   );
 
+  const renameFile = useCallback(
+    async (
+      owner: string,
+      repo: string,
+      oldPath: string,
+      newPath: string,
+      message: string,
+      branch: string
+    ): Promise<CommitResult> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await github.renameFile(owner, repo, oldPath, newPath, message, branch);
+        return result;
+      } catch (e) {
+        const msg = (e as Error).message;
+        setError(msg);
+        throw e;
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
   return {
     loading,
     error,
@@ -165,5 +190,6 @@ export function useGitHub() {
     uploadImage,
     deleteFile,
     createDirectory,
+    renameFile,
   };
 }

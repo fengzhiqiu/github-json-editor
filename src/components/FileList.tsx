@@ -58,7 +58,11 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
   const [createDirVisible, setCreateDirVisible] = useState(false);
   const [newDirName, setNewDirName] = useState('');
   const [creatingDir, setCreatingDir] = useState(false);
-  const { loading, fetchAllFiles, uploadImage, deleteFile, createDirectory } = useGitHub();
+  const [renameVisible, setRenameVisible] = useState(false);
+  const [renamingFile, setRenamingFile] = useState<GitHubFile | null>(null);
+  const [newFileName, setNewFileName] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  const { loading, fetchAllFiles, uploadImage, deleteFile, createDirectory, renameFile } = useGitHub();
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const [replacingFile, setReplacingFile] = useState<GitHubFile | null>(null);
 
@@ -331,6 +335,55 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
     }
   };
 
+  // Rename file
+  const handleOpenRename = (file: GitHubFile) => {
+    setRenamingFile(file);
+    setNewFileName(file.name);
+    setRenameVisible(true);
+  };
+
+  const handleRenameFile = async () => {
+    const trimmed = newFileName.trim();
+    if (!trimmed || !renamingFile) return;
+    if (trimmed === renamingFile.name) {
+      setRenameVisible(false);
+      return;
+    }
+    if (/[\/\\:*?"<>|]/.test(trimmed)) {
+      message.warning('文件名包含非法字符');
+      return;
+    }
+    if (allFiles.some((f) => f.name === trimmed && f.path !== renamingFile.path)) {
+      message.warning(`"${trimmed}" 已存在`);
+      return;
+    }
+
+    setRenaming(true);
+    try {
+      // Build new path
+      const dirPath = renamingFile.path.substring(0, renamingFile.path.lastIndexOf('/'));
+      const newPath = dirPath ? `${dirPath}/${trimmed}` : trimmed;
+
+      await renameFile(
+        repoConfig.owner,
+        repoConfig.repo,
+        renamingFile.path,
+        newPath,
+        `Rename: ${renamingFile.name} → ${trimmed}`,
+        repoConfig.branch
+      );
+      message.success(`已重命名为 ${trimmed}`);
+      setRenameVisible(false);
+      setRenamingFile(null);
+      setNewFileName('');
+      await reloadAfterChange();
+    } catch (e) {
+      message.error('重命名失败: ' + (e as Error).message);
+    } finally {
+      setRenaming(false);
+    }
+  };
+
   // Breadcrumb segments
   const pathSegments = subPath ? subPath.split('/') : [];
 
@@ -427,6 +480,15 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
                   </Button>,
                 ]
               : []),
+            <Button
+              type="text"
+              icon={<EditOutlined />}
+              onClick={() => handleOpenRename(file)}
+              key="rename"
+              style={{ color: '#722ed1' }}
+            >
+              改名
+            </Button>,
             <Button
               type="text"
               icon={<SwapOutlined />}
@@ -604,6 +666,30 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
           value={newDirName}
           onChange={(e) => setNewDirName(e.target.value)}
           onPressEnter={handleCreateDir}
+          autoFocus
+        />
+      </Modal>
+
+      {/* Rename file modal */}
+      <Modal
+        title="重命名文件"
+        open={renameVisible}
+        onOk={handleRenameFile}
+        onCancel={() => { setRenameVisible(false); setRenamingFile(null); setNewFileName(''); }}
+        confirmLoading={renaming}
+        okText="确认"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 8 }}>
+          <Text type="secondary">
+            当前文件：{renamingFile?.name}
+          </Text>
+        </div>
+        <Input
+          placeholder="输入新文件名"
+          value={newFileName}
+          onChange={(e) => setNewFileName(e.target.value)}
+          onPressEnter={handleRenameFile}
           autoFocus
         />
       </Modal>
