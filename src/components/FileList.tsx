@@ -35,7 +35,7 @@ import {
 } from '@ant-design/icons';
 import { RepoConfig, GitHubFile } from '../types';
 import { useGitHub } from '../hooks/useGitHub';
-import { isImageFile } from '../utils/github';
+import { isImageFile, getFileSha, getFileContent, updateFile } from '../utils/github';
 import imageCompression from 'browser-image-compression';
 import ScenePreview, { SceneData } from './ScenePreview';
 import { EyeOutlined } from '@ant-design/icons';
@@ -422,6 +422,89 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
     }
   };
 
+  const [deletingScene, setDeletingScene] = useState(false);
+
+  const handleDeleteScene = async (file: GitHubFile) => {
+    // Extract scene ID from filename (e.g. "12.json" → 12)
+    const match = file.name.match(/^(\d+)\.json$/);
+    if (!match) {
+      // Not a numbered scene file, fall back to normal delete
+      await handleDeleteFile(file);
+      return;
+    }
+    const sceneId = parseInt(match[1], 10);
+    const branch = repoConfig.branch || 'main';
+
+    setDeletingScene(true);
+    const hide = message.loading(`正在删除场景 ${sceneId} 及关联资源...`, 0);
+
+    try {
+      // 1. Delete the JSON file
+      await deleteFile(
+        repoConfig.owner,
+        repoConfig.repo,
+        file.path,
+        file.sha,
+        `Delete scene ${sceneId}: remove JSON`,
+        branch
+      );
+
+      // 2. Delete image (best effort)
+      const imgPath = `en/img/scene-${sceneId}.webp`;
+      const imgSha = await getFileSha(repoConfig.owner, repoConfig.repo, imgPath, branch);
+      if (imgSha) {
+        await deleteFile(
+          repoConfig.owner,
+          repoConfig.repo,
+          imgPath,
+          imgSha,
+          `Delete scene ${sceneId}: remove image`,
+          branch
+        );
+      }
+
+      // 3. Delete audio (best effort)
+      const audioPath = `en/audio/scene-${sceneId}.mp3`;
+      const audioSha = await getFileSha(repoConfig.owner, repoConfig.repo, audioPath, branch);
+      if (audioSha) {
+        await deleteFile(
+          repoConfig.owner,
+          repoConfig.repo,
+          audioPath,
+          audioSha,
+          `Delete scene ${sceneId}: remove audio`,
+          branch
+        );
+      }
+
+      // 4. Update scenes-index.json — remove entry for this scene
+      const indexPath = 'en/data/scenes-index.json';
+      const indexContent = await getFileContent(repoConfig.owner, repoConfig.repo, indexPath, branch);
+      const indexData = JSON.parse(indexContent.content);
+      indexData.scenes = indexData.scenes.filter((s: any) => s.id !== sceneId);
+      const updatedIndex = JSON.stringify(indexData, null, 2) + '\n';
+
+      await updateFile(
+        repoConfig.owner,
+        repoConfig.repo,
+        indexPath,
+        updatedIndex,
+        indexContent.sha,
+        `Delete scene ${sceneId}: update index`,
+        branch
+      );
+
+      message.success(`场景 ${sceneId} 已完全删除（JSON + 图片 + 音频 + 索引）`);
+      // Remove from local list
+      setAllFiles((prev) => prev.filter((f) => f.sha !== file.sha));
+    } catch (e: any) {
+      message.error('删除场景失败: ' + e.message);
+    } finally {
+      hide();
+      setDeletingScene(false);
+    }
+  };
+
   // Breadcrumb segments
   const pathSegments = subPath ? subPath.split('/') : [];
 
@@ -548,23 +631,46 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
             >
               替换
             </Button>,
-            <Popconfirm
-              title="确认删除"
-              description={`确定要删除 "${file.name}" 吗？`}
-              onConfirm={() => handleDeleteFile(file)}
-              okText="删除"
-              cancelText="取消"
-              okButtonProps={{ danger: true }}
-              key="delete"
-            >
-              <Button
-                type="text"
-                danger
-                icon={<DeleteOutlined />}
-              >
-                删除
-              </Button>
-            </Popconfirm>,
+            ...(isInScenesDir && isJson && file.name !== 'scenes-index.json' && file.name.match(/^\d+\.json$/)
+              ? [
+                  <Popconfirm
+                    title="删除整个场景"
+                    description={`将同步删除 JSON、图片、音频文件，并从索引中移除。确定要删除场景 "${file.name}" 吗？`}
+                    onConfirm={() => handleDeleteScene(file)}
+                    okText="删除场景"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true, loading: deletingScene }}
+                    key="delete-scene"
+                  >
+                    <Button
+                      type="text"
+                      danger
+                      icon={<DeleteOutlined />}
+                    >
+                      删除场景
+                    </Button>
+                  </Popconfirm>,
+                ]
+              : [
+                  <Popconfirm
+                    title="确认删除"
+                    description={`确定要删除 "${file.name}" 吗？`}
+                    onConfirm={() => handleDeleteFile(file)}
+                    okText="删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                    key="delete"
+                  >
+                    <Button
+                      type="text"
+                      danger
+                      icon={<DeleteOutlined />}
+                    >
+                      删除
+                    </Button>
+                  </Popconfirm>,
+                ]
+            ),
           ]}
         >
           <Card.Meta

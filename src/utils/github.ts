@@ -422,6 +422,31 @@ export async function deleteFile(
 }
 
 /**
+ * Get a file's SHA by path. Returns null if the file does not exist.
+ */
+export async function getFileSha(
+  owner: string,
+  repo: string,
+  path: string,
+  branch: string = 'main'
+): Promise<string | null> {
+  const octokit = getOctokit();
+  try {
+    const { data } = await octokit.repos.getContent({
+      owner,
+      repo,
+      path,
+      ref: branch,
+    });
+    if (Array.isArray(data)) return null;
+    return data.sha;
+  } catch (e: any) {
+    if (e.status === 404) return null;
+    throw e;
+  }
+}
+
+/**
  * Rename a file by creating it at the new path and deleting the old one.
  * Uses a single-branch ref to minimize race conditions.
  */
