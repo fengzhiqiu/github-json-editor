@@ -37,6 +37,8 @@ import { RepoConfig, GitHubFile } from '../types';
 import { useGitHub } from '../hooks/useGitHub';
 import { isImageFile } from '../utils/github';
 import imageCompression from 'browser-image-compression';
+import ScenePreview, { SceneData } from './ScenePreview';
+import { EyeOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
@@ -77,6 +79,11 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [showSceneButton, setShowSceneButton] = useState(false);
+
+  // Scene preview modal state
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewSceneData, setPreviewSceneData] = useState<SceneData | null>(null);
 
   // Compute the full current path
   const currentFullPath = subPath
@@ -393,6 +400,28 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
     }
   };
 
+  // Check if we're in a scenes directory (for preview button)
+  const isInScenesDir = currentFullPath.includes('scenes') || subPath.includes('scenes');
+
+  const handlePreviewScene = async (file: GitHubFile) => {
+    setPreviewLoading(true);
+    setPreviewVisible(true);
+    setPreviewSceneData(null);
+    try {
+      // Load from GitHub raw URL for immediate access
+      const rawUrl = `https://raw.githubusercontent.com/${repoConfig.owner}/${repoConfig.repo}/${repoConfig.branch || 'main'}/${file.path}`;
+      const res = await fetch(rawUrl);
+      if (!res.ok) throw new Error(`加载失败: ${res.status}`);
+      const data = await res.json();
+      setPreviewSceneData(data);
+    } catch (e: any) {
+      message.error('加载场景数据失败: ' + e.message);
+      setPreviewVisible(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   // Breadcrumb segments
   const pathSegments = subPath ? subPath.split('/') : [];
 
@@ -477,6 +506,19 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
             </div>
           }
           actions={[
+            ...(isJson && isInScenesDir && file.name !== 'scenes-index.json'
+              ? [
+                  <Button
+                    type="text"
+                    icon={<EyeOutlined />}
+                    onClick={() => handlePreviewScene(file)}
+                    key="preview"
+                    style={{ color: '#1677ff' }}
+                  >
+                    预览
+                  </Button>,
+                ]
+              : []),
             ...(isJson
               ? [
                   <Button
@@ -709,6 +751,26 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
           onPressEnter={handleRenameFile}
           autoFocus
         />
+      </Modal>
+
+      {/* Scene Preview Modal */}
+      <Modal
+        title={previewSceneData ? `📱 场景预览 — ${previewSceneData.title}` : '加载中...'}
+        open={previewVisible}
+        onCancel={() => setPreviewVisible(false)}
+        footer={null}
+        width={480}
+        centered
+        destroyOnClose
+      >
+        {previewLoading ? (
+          <div style={{ textAlign: 'center', padding: 40 }}>
+            <Spin size="large" />
+            <div style={{ marginTop: 12, color: '#999' }}>加载场景数据...</div>
+          </div>
+        ) : previewSceneData ? (
+          <ScenePreview sceneData={previewSceneData} />
+        ) : null}
       </Modal>
     </Card>
   );
