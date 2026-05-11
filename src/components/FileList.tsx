@@ -560,15 +560,71 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
       );
     }
 
+    const isSceneFile = isInScenesDir && isJson && file.name !== 'scenes-index.json' && !!file.name.match(/^\d+\.json$/);
+
+    // "More" dropdown items
+    const moreItems = [
+      {
+        key: 'rename',
+        icon: <EditOutlined style={{ color: '#722ed1' }} />,
+        label: <span style={{ color: '#722ed1' }}>改名</span>,
+        onClick: () => handleOpenRename(file),
+      },
+      {
+        key: 'replace',
+        icon: <SwapOutlined />,
+        label: '替换',
+        onClick: () => handleReplaceFile(file),
+      },
+      { type: 'divider' as const },
+      ...(isSceneFile
+        ? [{
+            key: 'delete-scene',
+            icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
+            label: (
+              <Popconfirm
+                title="删除整个场景"
+                description="将同步删除 JSON、图片、音频，并从索引中移除"
+                onConfirm={() => handleDeleteScene(file)}
+                okText="删除场景"
+                cancelText="取消"
+                okButtonProps={{ danger: true, loading: deletingScene }}
+                onPopupClick={(e) => e.stopPropagation()}
+              >
+                <span style={{ color: '#ff4d4f' }}>删除场景</span>
+              </Popconfirm>
+            ),
+          }]
+        : [{
+            key: 'delete',
+            icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
+            label: (
+              <Popconfirm
+                title="确认删除"
+                description={`确定要删除 "${file.name}" 吗？`}
+                onConfirm={() => handleDeleteFile(file)}
+                okText="删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+                onPopupClick={(e) => e.stopPropagation()}
+              >
+                <span style={{ color: '#ff4d4f' }}>删除</span>
+              </Popconfirm>
+            ),
+          }]
+      ),
+    ];
+
     return (
       <Col xs={12} sm={8} md={6} key={file.sha}>
         <Card
           hoverable
           size="small"
+          styles={{ body: { padding: '8px 10px' } }}
           cover={
             <div
               style={{
-                height: 160,
+                height: 140,
                 overflow: 'hidden',
                 display: 'flex',
                 alignItems: 'center',
@@ -581,7 +637,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
                 <Image
                   src={getImageUrl(file)}
                   alt={file.name}
-                  style={{ maxHeight: 160, maxWidth: '100%', objectFit: 'contain' }}
+                  style={{ maxHeight: 140, maxWidth: '100%', objectFit: 'contain' }}
                   preview={true}
                   fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iIGZpbGw9IiNjY2MiIGZvbnQtc2l6ZT0iMTIiPuWKoOi9veWksei0pTwvdGV4dD48L3N2Zz4="
                 />
@@ -590,125 +646,59 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
               )}
             </div>
           }
-          actions={(() => {
-            const isSceneFile = isInScenesDir && isJson && file.name !== 'scenes-index.json' && !!file.name.match(/^\d+\.json$/);
+        >
+          {/* File name + size */}
+          <div style={{ marginBottom: 8 }}>
+            <Text
+              ellipsis={{ tooltip: file.name }}
+              style={{ fontSize: 12, fontWeight: 500, display: 'block' }}
+            >
+              {file.name}
+            </Text>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {formatSize(file.size)}
+            </Text>
+          </div>
 
-            // "More" dropdown items
-            const moreItems = [
-              {
-                key: 'rename',
-                icon: <EditOutlined style={{ color: '#722ed1' }} />,
-                label: <span style={{ color: '#722ed1' }}>改名</span>,
-                onClick: () => handleOpenRename(file),
-              },
-              {
-                key: 'replace',
-                icon: <SwapOutlined />,
-                label: '替换',
-                onClick: () => handleReplaceFile(file),
-              },
-              { type: 'divider' as const },
-              ...(isSceneFile
-                ? [{
-                    key: 'delete-scene',
-                    icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
-                    label: (
-                      <Popconfirm
-                        title="删除整个场景"
-                        description="将同步删除 JSON、图片、音频，并从索引中移除"
-                        onConfirm={() => handleDeleteScene(file)}
-                        okText="删除场景"
-                        cancelText="取消"
-                        okButtonProps={{ danger: true, loading: deletingScene }}
-                        // stop dropdown from closing before confirm
-                        onPopupClick={(e) => e.stopPropagation()}
-                      >
-                        <span style={{ color: '#ff4d4f' }}>删除场景</span>
-                      </Popconfirm>
-                    ),
-                  }]
-                : [{
-                    key: 'delete',
-                    icon: <DeleteOutlined style={{ color: '#ff4d4f' }} />,
-                    label: (
-                      <Popconfirm
-                        title="确认删除"
-                        description={`确定要删除 "${file.name}" 吗？`}
-                        onConfirm={() => handleDeleteFile(file)}
-                        okText="删除"
-                        cancelText="取消"
-                        okButtonProps={{ danger: true }}
-                        onPopupClick={(e) => e.stopPropagation()}
-                      >
-                        <span style={{ color: '#ff4d4f' }}>删除</span>
-                      </Popconfirm>
-                    ),
-                  }]
-              ),
-            ];
-
-            return [
-              // Primary actions (scene: 预览 + 编辑; image: nothing; others: 编辑)
-              ...(isSceneFile
-                ? [
-                    <Button
-                      type="text"
-                      icon={<EyeOutlined />}
-                      onClick={() => handlePreviewScene(file)}
-                      key="preview"
-                      style={{ color: '#1677ff' }}
-                    >
-                      预览
-                    </Button>,
-                    <Button
-                      type="text"
-                      icon={<EditOutlined />}
-                      onClick={() => onSelectFile(file, subPath)}
-                      key="edit"
-                    >
-                      编辑
-                    </Button>,
-                  ]
-                : isJson
-                  ? [
-                      <Button
-                        type="text"
-                        icon={<EditOutlined />}
-                        onClick={() => onSelectFile(file, subPath)}
-                        key="edit"
-                      >
-                        编辑
-                      </Button>,
-                    ]
-                  : []
-              ),
-              // "More" button
+          {/* Action buttons — stacked layout, full-width, mobile friendly */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {/* Row 1: primary actions */}
+            <div style={{ display: 'flex', gap: 4 }}>
+              {isSceneFile && (
+                <Button
+                  size="small"
+                  icon={<EyeOutlined />}
+                  onClick={() => handlePreviewScene(file)}
+                  style={{ flex: 1, fontSize: 12 }}
+                >
+                  预览
+                </Button>
+              )}
+              {(isSceneFile || isJson) && (
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<EditOutlined />}
+                  onClick={() => onSelectFile(file, subPath)}
+                  style={{ flex: 1, fontSize: 12 }}
+                >
+                  编辑
+                </Button>
+              )}
+              {/* For non-json files (images etc), show only the ⋯ menu */}
               <Dropdown
-                key="more"
                 menu={{ items: moreItems }}
                 trigger={['click']}
                 placement="bottomRight"
               >
-                <Button type="text" icon={<EllipsisOutlined />} />
-              </Dropdown>,
-            ];
-          })()}
-        >
-          <Card.Meta
-            description={
-              <Space direction="vertical" size={2} style={{ width: '100%' }}>
-                <Text
-                  ellipsis={{ tooltip: file.name }}
-                  style={{ fontSize: 12, fontWeight: 500 }}
-                >
-                  {file.name}
-                </Text>
-                <Text type="secondary" style={{ fontSize: 11 }}>
-                  {formatSize(file.size)}
-                </Text>
-              </Space>
-            }
-          />
+                <Button
+                  size="small"
+                  icon={<EllipsisOutlined />}
+                  style={{ flexShrink: 0 }}
+                />
+              </Dropdown>
+            </div>
+          </div>
         </Card>
       </Col>
     );
