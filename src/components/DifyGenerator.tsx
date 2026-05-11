@@ -9,6 +9,7 @@ import {
   Typography,
   Space,
   Spin,
+  Divider,
 } from 'antd';
 import {
   ArrowLeftOutlined,
