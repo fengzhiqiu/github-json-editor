@@ -20,6 +20,7 @@ const App: React.FC = () => {
   const [selectedRepo, setSelectedRepo] = useState<RepoConfig | null>(null);
   const [selectedFile, setSelectedFile] = useState<GitHubFile | null>(null);
   const [fileListKey, setFileListKey] = useState(0);
+  const [fileListSubPath, setFileListSubPath] = useState('');
 
   if (loading) {
     return (
@@ -54,14 +55,16 @@ const App: React.FC = () => {
     setCurrentView('files');
   };
 
-  const handleSelectFile = (file: GitHubFile) => {
+  const handleSelectFile = (file: GitHubFile, subPath?: string) => {
     setSelectedFile(file);
+    if (subPath !== undefined) setFileListSubPath(subPath);
     setCurrentView('editor');
   };
 
   const handleBackToRepos = () => {
     setSelectedRepo(null);
     setSelectedFile(null);
+    setFileListSubPath('');
     setCurrentView('repos');
   };
 
@@ -87,6 +90,8 @@ const App: React.FC = () => {
             onSelectFile={handleSelectFile}
             onBack={handleBackToRepos}
             onOpenSceneEditor={handleOpenSceneEditor}
+            initialSubPath={fileListSubPath}
+            onSubPathChange={setFileListSubPath}
           />
         ) : null;
       case 'editor':

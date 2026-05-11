@@ -42,19 +42,27 @@ const { Text } = Typography;
 
 interface FileListProps {
   repoConfig: RepoConfig;
-  onSelectFile: (file: GitHubFile) => void;
+  onSelectFile: (file: GitHubFile, subPath?: string) => void;
   onBack: () => void;
   onOpenSceneEditor?: () => void;
+  initialSubPath?: string;
+  onSubPathChange?: (subPath: string) => void;
 }
 
 const PAGE_SIZE = 20;
 
-const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, onOpenSceneEditor }) => {
+const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, onOpenSceneEditor, initialSubPath, onSubPathChange }) => {
   const [allFiles, setAllFiles] = useState<GitHubFile[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
-  const [subPath, setSubPath] = useState(''); // relative path from repoConfig.path
+  const [subPath, setSubPathInternal] = useState(initialSubPath || ''); // relative path from repoConfig.path
+
+  // Wrap setSubPath to notify parent
+  const setSubPath = (path: string) => {
+    setSubPathInternal(path);
+    onSubPathChange?.(path);
+  };
   const [createDirVisible, setCreateDirVisible] = useState(false);
   const [newDirName, setNewDirName] = useState('');
   const [creatingDir, setCreatingDir] = useState(false);
@@ -473,7 +481,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
                   <Button
                     type="text"
                     icon={<EditOutlined />}
-                    onClick={() => onSelectFile(file)}
+                    onClick={() => onSelectFile(file, subPath)}
                     key="edit"
                   >
                     编辑
