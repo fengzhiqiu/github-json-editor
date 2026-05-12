@@ -149,6 +149,10 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ repoConfig, onBack }) => {
         { id: 'nature', name: '自然', emoji: '🌊', sort: 10 },
         { id: 'home', name: '居家', emoji: '🏠', sort: 11 },
         { id: 'health', name: '健康', emoji: '🏥', sort: 12 },
+        { id: 'campus', name: '校园', emoji: '🎓', sort: 13 },
+        { id: 'beauty', name: '美妆穿搭', emoji: '💄', sort: 14 },
+        { id: 'pets', name: '萌宠', emoji: '🐾', sort: 15 },
+        { id: 'creative', name: '手作文艺', emoji: '✨', sort: 16 },
       ]);
     }
     setCategoriesLoading(false);
