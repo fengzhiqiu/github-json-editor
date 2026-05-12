@@ -18,6 +18,7 @@ import {
   Input,
   Breadcrumb,
   Dropdown,
+  Checkbox,
 } from 'antd';
 import {
   FileTextOutlined,
@@ -34,6 +35,8 @@ import {
   FolderAddOutlined,
   HomeFilled,
   EllipsisOutlined,
+  CheckSquareOutlined,
+  CloseSquareOutlined,
 } from '@ant-design/icons';
 import { RepoConfig, GitHubFile } from '../types';
 import { useGitHub } from '../hooks/useGitHub';
@@ -86,6 +89,11 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewSceneData, setPreviewSceneData] = useState<SceneData | null>(null);
+
+  // Multi-select state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set()); // Set of file.sha
+  const [batchDeleting, setBatchDeleting] = useState(false);
 
   // Compute the full current path
   const currentFullPath = subPath
@@ -522,6 +530,115 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
     }
   };
 
+  // Multi-select helpers
+  const toggleSelect = (sha: string) => {
+    setSelectedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(sha)) {
+        next.delete(sha);
+      } else {
+        next.add(sha);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    const nonDirFiles = allFiles.filter((f) => f.type !== 'dir');
+    setSelectedFiles(new Set(nonDirFiles.map((f) => f.sha)));
+  };
+
+  const deselectAll = () => {
+    setSelectedFiles(new Set());
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedFiles(new Set());
+  };
+
+  const handleBatchDelete = async () => {
+    const filesToDelete = allFiles.filter((f) => selectedFiles.has(f.sha) && f.type !== 'dir');
+    if (filesToDelete.length === 0) return;
+
+    setBatchDeleting(true);
+    const hide = message.loading(`正在删除 ${filesToDelete.length} 个文件...`, 0);
+    const branch = repoConfig.branch || 'main';
+
+    let deleted = 0;
+    const failed: string[] = [];
+    // Track scene IDs to remove from index
+    const deletedSceneIds: number[] = [];
+    const isInScenesPath = currentFullPath.includes('scenes') || currentFullPath.includes('en/data');
+
+    for (const file of filesToDelete) {
+      try {
+        // For scene files, also delete associated assets
+        const sceneMatch = file.name.match(/^(\d+)\.json$/);
+        if (sceneMatch && isInScenesPath) {
+          const sceneId = parseInt(sceneMatch[1], 10);
+          deletedSceneIds.push(sceneId);
+
+          // Delete image (best effort)
+          try {
+            const imgPath = `en/img/scene-${sceneId}.webp`;
+            const imgSha = await getFileSha(repoConfig.owner, repoConfig.repo, imgPath, branch);
+            if (imgSha) {
+              await deleteFile(repoConfig.owner, repoConfig.repo, imgPath, imgSha, `Batch delete scene ${sceneId}: image`, branch);
+            }
+          } catch { /* ignore */ }
+
+          // Delete audio (best effort)
+          try {
+            const audioPath = `en/audio/scene-${sceneId}.mp3`;
+            const audioSha = await getFileSha(repoConfig.owner, repoConfig.repo, audioPath, branch);
+            if (audioSha) {
+              await deleteFile(repoConfig.owner, repoConfig.repo, audioPath, audioSha, `Batch delete scene ${sceneId}: audio`, branch);
+            }
+          } catch { /* ignore */ }
+        }
+
+        // Get fresh SHA in case previous deletes changed it
+        const freshSha = await getFileSha(repoConfig.owner, repoConfig.repo, file.path, branch);
+        if (freshSha) {
+          await deleteFile(repoConfig.owner, repoConfig.repo, file.path, freshSha, `Batch delete: ${file.name}`, branch);
+        }
+        deleted++;
+      } catch (e: any) {
+        failed.push(file.name);
+        console.warn(`删除 ${file.name} 失败:`, e);
+      }
+    }
+
+    // Update scenes-index.json if scene files were deleted
+    if (deletedSceneIds.length > 0) {
+      try {
+        const indexPath = 'en/data/scenes-index.json';
+        const indexContent = await getFileContent(repoConfig.owner, repoConfig.repo, indexPath, branch);
+        const indexData = JSON.parse(indexContent.content);
+        const sceneIdSet = new Set(deletedSceneIds);
+        indexData.scenes = indexData.scenes.filter((s: any) => !sceneIdSet.has(Number(s.id)));
+        const updatedIndex = JSON.stringify(indexData, null, 2) + '\n';
+        await updateFile(repoConfig.owner, repoConfig.repo, indexPath, updatedIndex, indexContent.sha, `Batch delete: update index (removed ${deletedSceneIds.length} scenes)`, branch);
+      } catch (e) {
+        console.warn('更新 scenes-index.json 失败:', e);
+      }
+    }
+
+    hide();
+    setBatchDeleting(false);
+
+    if (failed.length === 0) {
+      message.success(`已删除 ${deleted} 个文件`);
+    } else {
+      message.warning(`删除完成：成功 ${deleted}，失败 ${failed.length}（${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '...' : ''}）`);
+    }
+
+    // Update local list
+    setAllFiles((prev) => prev.filter((f) => !selectedFiles.has(f.sha)));
+    exitSelectMode();
+  };
+
   // Breadcrumb segments
   const pathSegments = subPath ? subPath.split('/') : [];
 
@@ -636,6 +753,8 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
           hoverable
           size="small"
           styles={{ body: { padding: '8px 10px' } }}
+          style={selectMode && selectedFiles.has(file.sha) ? { border: '2px solid #1677ff' } : undefined}
+          onClick={selectMode ? (e) => { e.stopPropagation(); toggleSelect(file.sha); } : undefined}
           cover={
             <div
               style={{
@@ -646,8 +765,17 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
                 justifyContent: 'center',
                 background: '#fafafa',
                 borderBottom: '1px solid #f0f0f0',
+                position: 'relative',
               }}
             >
+              {selectMode && (
+                <Checkbox
+                  checked={selectedFiles.has(file.sha)}
+                  onChange={() => toggleSelect(file.sha)}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ position: 'absolute', top: 8, left: 8, zIndex: 10 }}
+                />
+              )}
               {isImage ? (
                 <Image
                   src={getImageUrl(file)}
@@ -732,51 +860,88 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
       }
       extra={
         <Space wrap>
-          {showSceneButton && onOpenSceneEditor && (
-            <Button
-              type="primary"
-              style={{ background: '#722ed1', borderColor: '#722ed1' }}
-              onClick={onOpenSceneEditor}
-            >
-              ✨ 新增场景
-            </Button>
+          {selectMode ? (
+            <>
+              <Tag color="blue">{selectedFiles.size} 项已选</Tag>
+              <Button size="small" onClick={selectAll}>全选</Button>
+              <Button size="small" onClick={deselectAll}>取消全选</Button>
+              <Popconfirm
+                title="批量删除"
+                description={`确定要删除选中的 ${selectedFiles.size} 个文件吗？`}
+                onConfirm={handleBatchDelete}
+                okText="删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true, loading: batchDeleting }}
+                disabled={selectedFiles.size === 0}
+              >
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  disabled={selectedFiles.size === 0}
+                  loading={batchDeleting}
+                >
+                  删除 ({selectedFiles.size})
+                </Button>
+              </Popconfirm>
+              <Button icon={<CloseSquareOutlined />} onClick={exitSelectMode}>
+                退出多选
+              </Button>
+            </>
+          ) : (
+            <>
+              {showSceneButton && onOpenSceneEditor && (
+                <Button
+                  type="primary"
+                  style={{ background: '#722ed1', borderColor: '#722ed1' }}
+                  onClick={onOpenSceneEditor}
+                >
+                  ✨ 新增场景
+                </Button>
+              )}
+              {showSceneButton && onOpenDifyGenerator && (
+                <Button
+                  type="primary"
+                  onClick={onOpenDifyGenerator}
+                >
+                  🚀 AI 生成
+                </Button>
+              )}
+              <Button
+                icon={<CheckSquareOutlined />}
+                onClick={() => setSelectMode(true)}
+              >
+                多选
+              </Button>
+              <Button
+                icon={<FolderAddOutlined />}
+                onClick={() => setCreateDirVisible(true)}
+              >
+                创建目录
+              </Button>
+              <Upload
+                multiple
+                showUploadList={false}
+                beforeUpload={(_file, fileList) => {
+                  const dataTransfer = new DataTransfer();
+                  fileList.forEach((f) => dataTransfer.items.add(f as unknown as File));
+                  handleUploadFiles(dataTransfer.files);
+                  return false;
+                }}
+                disabled={uploading}
+              >
+                <Button
+                  type="primary"
+                  icon={<UploadOutlined />}
+                  loading={uploading}
+                >
+                  {uploading && uploadProgress ? uploadProgress : '上传文件'}
+                </Button>
+              </Upload>
+              <Button icon={<ReloadOutlined />} onClick={loadFiles} loading={loading}>
+                刷新
+              </Button>
+            </>
           )}
-          {showSceneButton && onOpenDifyGenerator && (
-            <Button
-              type="primary"
-              onClick={onOpenDifyGenerator}
-            >
-              🚀 AI 生成
-            </Button>
-          )}
-          <Button
-            icon={<FolderAddOutlined />}
-            onClick={() => setCreateDirVisible(true)}
-          >
-            创建目录
-          </Button>
-          <Upload
-            multiple
-            showUploadList={false}
-            beforeUpload={(_file, fileList) => {
-              const dataTransfer = new DataTransfer();
-              fileList.forEach((f) => dataTransfer.items.add(f as unknown as File));
-              handleUploadFiles(dataTransfer.files);
-              return false;
-            }}
-            disabled={uploading}
-          >
-            <Button
-              type="primary"
-              icon={<UploadOutlined />}
-              loading={uploading}
-            >
-              {uploading && uploadProgress ? uploadProgress : '上传文件'}
-            </Button>
-          </Upload>
-          <Button icon={<ReloadOutlined />} onClick={loadFiles} loading={loading}>
-            刷新
-          </Button>
         </Space>
       }
       style={{ borderRadius: 8 }}
