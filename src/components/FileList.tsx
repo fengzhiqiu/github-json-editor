@@ -451,50 +451,65 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
         branch
       );
 
-      // 2. Delete image (best effort)
-      const imgPath = `en/img/scene-${sceneId}.webp`;
-      const imgSha = await getFileSha(repoConfig.owner, repoConfig.repo, imgPath, branch);
-      if (imgSha) {
-        await deleteFile(
-          repoConfig.owner,
-          repoConfig.repo,
-          imgPath,
-          imgSha,
-          `Delete scene ${sceneId}: remove image`,
-          branch
-        );
+      // 2. Delete image (best effort — never block index update)
+      try {
+        const imgPath = `en/img/scene-${sceneId}.webp`;
+        const imgSha = await getFileSha(repoConfig.owner, repoConfig.repo, imgPath, branch);
+        if (imgSha) {
+          await deleteFile(
+            repoConfig.owner,
+            repoConfig.repo,
+            imgPath,
+            imgSha,
+            `Delete scene ${sceneId}: remove image`,
+            branch
+          );
+        }
+      } catch (imgErr) {
+        console.warn(`删除图片失败（已忽略）:`, imgErr);
       }
 
-      // 3. Delete audio (best effort)
-      const audioPath = `en/audio/scene-${sceneId}.mp3`;
-      const audioSha = await getFileSha(repoConfig.owner, repoConfig.repo, audioPath, branch);
-      if (audioSha) {
-        await deleteFile(
-          repoConfig.owner,
-          repoConfig.repo,
-          audioPath,
-          audioSha,
-          `Delete scene ${sceneId}: remove audio`,
-          branch
-        );
+      // 3. Delete audio (best effort — never block index update)
+      try {
+        const audioPath = `en/audio/scene-${sceneId}.mp3`;
+        const audioSha = await getFileSha(repoConfig.owner, repoConfig.repo, audioPath, branch);
+        if (audioSha) {
+          await deleteFile(
+            repoConfig.owner,
+            repoConfig.repo,
+            audioPath,
+            audioSha,
+            `Delete scene ${sceneId}: remove audio`,
+            branch
+          );
+        }
+      } catch (audioErr) {
+        console.warn(`删除音频失败（已忽略）:`, audioErr);
       }
 
       // 4. Update scenes-index.json — remove entry for this scene
+      // Fetch fresh content AFTER deletes to get latest SHA
       const indexPath = 'en/data/scenes-index.json';
       const indexContent = await getFileContent(repoConfig.owner, repoConfig.repo, indexPath, branch);
       const indexData = JSON.parse(indexContent.content);
-      indexData.scenes = indexData.scenes.filter((s: any) => s.id !== sceneId);
-      const updatedIndex = JSON.stringify(indexData, null, 2) + '\n';
+      const originalLength = indexData.scenes.length;
+      // Use == for loose comparison in case id types mismatch (string vs number)
+      indexData.scenes = indexData.scenes.filter((s: any) => Number(s.id) !== sceneId);
 
-      await updateFile(
-        repoConfig.owner,
-        repoConfig.repo,
-        indexPath,
-        updatedIndex,
-        indexContent.sha,
-        `Delete scene ${sceneId}: update index`,
-        branch
-      );
+      if (indexData.scenes.length < originalLength) {
+        const updatedIndex = JSON.stringify(indexData, null, 2) + '\n';
+        await updateFile(
+          repoConfig.owner,
+          repoConfig.repo,
+          indexPath,
+          updatedIndex,
+          indexContent.sha,
+          `Delete scene ${sceneId}: update index`,
+          branch
+        );
+      } else {
+        console.warn(`场景 ${sceneId} 不在 scenes-index.json 中，跳过更新`);
+      }
 
       message.success(`场景 ${sceneId} 已完全删除（JSON + 图片 + 音频 + 索引）`);
       // Remove from local list
