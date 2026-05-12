@@ -17,14 +17,14 @@ export function useAuth() {
     const tokenFromUrl = params.get('token');
 
     if (tokenFromUrl) {
-      sessionStorage.setItem(TOKEN_KEY, tokenFromUrl);
+      localStorage.setItem(TOKEN_KEY, tokenFromUrl);
       window.history.replaceState({}, '', window.location.pathname);
       initializeWithToken(tokenFromUrl);
       return;
     }
 
-    // Check sessionStorage
-    const storedToken = sessionStorage.getItem(TOKEN_KEY);
+    // Check localStorage for persisted token
+    const storedToken = localStorage.getItem(TOKEN_KEY);
     if (storedToken) {
       initializeWithToken(storedToken);
       return;
@@ -40,7 +40,7 @@ export function useAuth() {
       setAuthState({ token, user, loading: false });
     } catch (error) {
       console.error('Failed to authenticate:', error);
-      sessionStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(TOKEN_KEY);
       setAuthState({ token: null, user: null, loading: false });
     }
   };
@@ -50,7 +50,7 @@ export function useAuth() {
     try {
       initOctokit(token);
       const user = await getCurrentUser();
-      sessionStorage.setItem(TOKEN_KEY, token);
+      localStorage.setItem(TOKEN_KEY, token);
       setAuthState({ token, user, loading: false });
     } catch (error) {
       setAuthState({ token: null, user: null, loading: false });
@@ -70,7 +70,7 @@ export function useAuth() {
   }, []);
 
   const logout = useCallback(() => {
-    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
     setAuthState({ token: null, user: null, loading: false });
   }, []);
 
