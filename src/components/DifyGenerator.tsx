@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   Upload,
@@ -28,8 +28,14 @@ const DIFY_API_KEY_STORAGE = 'dify-scene-generator-api-key';
 
 // CDN base (jsDelivr mirror)
 const CDN_BASE = 'https://cdn.jsdmirror.com/gh/techinsblog/cdn/en';
+const CATEGORIES_URL = `${CDN_BASE}/data/categories.json`;
 
-const CATEGORIES = ['日常', '治愈', '旅行', '日常出行', '美食', '运动'];
+interface CategoryItem {
+  id: string;
+  name: string;
+  emoji: string;
+  sort: number;
+}
 
 interface DifyGeneratorProps {
   onBack: () => void;
@@ -42,13 +48,46 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
   );
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
-  const [category, setCategory] = useState<string>('');
+  const [categoryId, setCategoryId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState('');
   const [sceneData, setSceneData] = useState<SceneData | null>(null);
   const [sceneImageUrl, setSceneImageUrl] = useState('');
   const [sceneAudioUrl, setSceneAudioUrl] = useState('');
+
+  // Categories (loaded from CDN)
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+  useEffect(() => {
+    const loadCategories = async () => {
+      setCategoriesLoading(true);
+      try {
+        const res = await fetch(CATEGORIES_URL + '?_t=' + Date.now());
+        if (res.ok) {
+          const data = await res.json();
+          if (data.categories && data.categories.length) {
+            setCategories(data.categories.sort((a: CategoryItem, b: CategoryItem) => a.sort - b.sort));
+            setCategoriesLoading(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load categories from CDN');
+      }
+      // Fallback
+      setCategories([
+        { id: 'daily', name: '日常', emoji: '☀️', sort: 1 },
+        { id: 'healing', name: '治愈', emoji: '🌿', sort: 2 },
+        { id: 'travel', name: '出行', emoji: '🚶', sort: 3 },
+        { id: 'food', name: '美食', emoji: '🍜', sort: 4 },
+        { id: 'work', name: '职场', emoji: '💼', sort: 5 },
+      ]);
+      setCategoriesLoading(false);
+    };
+    loadCategories();
+  }, []);
 
   const saveApiKey = (key: string) => {
     setApiKey(key);
@@ -70,7 +109,7 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
       message.error('请上传场景图片');
       return;
     }
-    if (!category) {
+    if (!categoryId) {
       message.error('请选择分类');
       return;
     }
@@ -109,7 +148,11 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
           upload_file_id: fileId,
         },
       };
-      if (category) inputs.category = category;
+      if (categoryId) {
+        // Pass category name to Dify for prompt context
+        const cat = categories.find((c) => c.id === categoryId);
+        inputs.category = cat ? cat.name : categoryId;
+      }
       if (title.trim()) inputs.title = title.trim();
 
       const runRes = await fetch(`${DIFY_BASE_URL}/workflows/run`, {
@@ -258,11 +301,12 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
           <div>
             <Text strong style={{ display: 'block', marginBottom: 8 }}>分类 *</Text>
             <Select
-              value={category || undefined}
-              onChange={setCategory}
+              value={categoryId || undefined}
+              onChange={setCategoryId}
+              loading={categoriesLoading}
               placeholder="选择场景分类"
               style={{ width: 200 }}
-              options={CATEGORIES.map((c) => ({ label: c, value: c }))}
+              options={categories.map((c) => ({ label: `${c.emoji} ${c.name}`, value: c.id }))}
             />
           </div>
 
@@ -282,7 +326,7 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
             icon={<RocketOutlined />}
             onClick={runWorkflow}
             loading={generating}
-            disabled={!imageFile || !category || !apiKey}
+            disabled={!imageFile || !categoryId || !apiKey}
           >
             生成场景
           </Button>

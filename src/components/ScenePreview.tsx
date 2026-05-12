@@ -80,7 +80,8 @@ function clamp(v: number, min: number, max: number) {
 export interface SceneData {
   id: number;
   title: string;
-  category?: string;
+  categoryId?: string;
+  category?: string; // deprecated, kept for backward compat
   gradient?: string;
   image?: string;
   audioUrl?: string;
@@ -323,7 +324,7 @@ const ScenePreview: React.FC<ScenePreviewProps> = ({ sceneData, imageUrl, audioU
       <div style={{ marginTop: 20 }}>
         <Space wrap>
           <Tag color="blue">ID: {sceneData.id}</Tag>
-          {sceneData.category && <Tag color="green">{sceneData.category}</Tag>}
+          {(sceneData.categoryId || sceneData.category) && <Tag color="green">{sceneData.categoryId || sceneData.category}</Tag>}
           <Tag>{sceneData.words.length} 个单词</Tag>
           {sceneData.collocations && sceneData.collocations.length > 0 && (
             <Tag>{sceneData.collocations.length} 个搭配</Tag>

@@ -50,16 +50,27 @@ interface CollocationItem {
   meaning: string;
 }
 
-const CATEGORIES = ['日常', '治愈', '旅行', '日常出行', '美食', '运动'];
 const CDN_BASE = 'https://cdn.jsdmirror.com/gh/techinsblog/cdn';
+const CATEGORIES_URL = `${CDN_BASE}/en/data/categories.json`;
+
+interface CategoryItem {
+  id: string;
+  name: string;
+  emoji: string;
+  sort: number;
+}
 
 const SceneEditor: React.FC<SceneEditorProps> = ({ repoConfig, onBack }) => {
   const [submitting, setSubmitting] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
 
+  // Categories (loaded from CDN)
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
   // Basic info
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<string>('');
+  const [categoryId, setCategoryId] = useState<string>('');
   const [gradientColors, setGradientColors] = useState<[string, string, string]>([
     '#667eea', '#764ba2', '#f093fb',
   ]);
@@ -98,7 +109,43 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ repoConfig, onBack }) => {
 
   useEffect(() => {
     fetchNextId();
+    fetchCategories();
   }, []);
+
+  const fetchCategories = async () => {
+    setCategoriesLoading(true);
+    try {
+      const res = await fetch(CATEGORIES_URL + '?_t=' + Date.now());
+      if (res.ok) {
+        const data = await res.json();
+        if (data.categories && data.categories.length) {
+          setCategories(data.categories.sort((a: CategoryItem, b: CategoryItem) => a.sort - b.sort));
+          setCategoriesLoading(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load categories from CDN, trying GitHub API...');
+    }
+    // Fallback: load from GitHub API
+    try {
+      const content = await github.getFileContent('techinsblog', 'cdn', 'en/data/categories.json', 'main');
+      const data = JSON.parse(content.content);
+      if (data.categories && data.categories.length) {
+        setCategories(data.categories.sort((a: CategoryItem, b: CategoryItem) => a.sort - b.sort));
+      }
+    } catch (e) {
+      // Ultimate fallback: hardcoded
+      setCategories([
+        { id: 'daily', name: '日常', emoji: '☀️', sort: 1 },
+        { id: 'healing', name: '治愈', emoji: '🌿', sort: 2 },
+        { id: 'travel', name: '出行', emoji: '🚶', sort: 3 },
+        { id: 'food', name: '美食', emoji: '🍜', sort: 4 },
+        { id: 'work', name: '职场', emoji: '💼', sort: 5 },
+      ]);
+    }
+    setCategoriesLoading(false);
+  };
 
   const fetchNextId = async () => {
     setLoadingId(true);
@@ -286,7 +333,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ repoConfig, onBack }) => {
       id: nextId,
       title,
       image: imageCdnUrl,
-      category,
+      categoryId,
       gradient: getGradientString(),
       audioUrl: audioCdnUrl,
       sentence: { en: sentenceEn, zh: sentenceZh, highlights },
@@ -311,7 +358,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ repoConfig, onBack }) => {
       id: nextId,
       title,
       image: imageCdnUrl,
-      category,
+      categoryId,
       gradient: getGradientString(),
       wordCount: words.length,
       previewWords: words.slice(0, 3).map((w) => w.text).join(' · '),
@@ -321,7 +368,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ repoConfig, onBack }) => {
   const handleSubmit = async () => {
     if (!nextId) { message.error('场景 ID 未就绪'); return; }
     if (!title.trim()) { message.error('请填写场景标题'); return; }
-    if (!category) { message.error('请选择分类'); return; }
+    if (!categoryId) { message.error('请选择分类'); return; }
     if (!imageCdnUrl) { message.error('请上传场景图片'); return; }
     if (words.length === 0) { message.error('请至少添加一个单词'); return; }
 
@@ -408,10 +455,11 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ repoConfig, onBack }) => {
               <Text strong>分类</Text>
               <Select
                 placeholder="选择分类"
-                value={category || undefined}
-                onChange={setCategory}
+                value={categoryId || undefined}
+                onChange={setCategoryId}
+                loading={categoriesLoading}
                 style={{ width: '100%', marginTop: 4 }}
-                options={CATEGORIES.map((c) => ({ label: c, value: c }))}
+                options={categories.map((c) => ({ label: `${c.emoji} ${c.name}`, value: c.id }))}
               />
             </div>
           </Col>
@@ -750,7 +798,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ repoConfig, onBack }) => {
           block
           loading={submitting}
           onClick={handleSubmit}
-          disabled={!title || !category || !imageCdnUrl || words.length === 0}
+          disabled={!title || !categoryId || !imageCdnUrl || words.length === 0}
         >
           🚀 提交场景
         </Button>
