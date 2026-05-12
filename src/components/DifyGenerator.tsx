@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Card,
   Upload,
-  Select,
   Input,
   Button,
   message,
@@ -28,14 +27,6 @@ const DIFY_API_KEY_STORAGE = 'dify-scene-generator-api-key';
 
 // CDN base (jsDelivr mirror)
 const CDN_BASE = 'https://cdn.jsdmirror.com/gh/techinsblog/cdn/en';
-const CATEGORIES_URL = `${CDN_BASE}/data/categories.json`;
-
-interface CategoryItem {
-  id: string;
-  name: string;
-  emoji: string;
-  sort: number;
-}
 
 interface DifyGeneratorProps {
   onBack: () => void;
@@ -48,7 +39,6 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
   );
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
-  const [categoryId, setCategoryId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState('');
@@ -56,49 +46,6 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
   const [sceneImageUrl, setSceneImageUrl] = useState('');
   const [sceneAudioUrl, setSceneAudioUrl] = useState('');
 
-  // Categories (loaded from CDN)
-  const [categories, setCategories] = useState<CategoryItem[]>([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(true);
-
-  useEffect(() => {
-    const loadCategories = async () => {
-      setCategoriesLoading(true);
-      try {
-        const res = await fetch(CATEGORIES_URL + '?_t=' + Date.now());
-        if (res.ok) {
-          const data = await res.json();
-          if (data.categories && data.categories.length) {
-            setCategories(data.categories.sort((a: CategoryItem, b: CategoryItem) => a.sort - b.sort));
-            setCategoriesLoading(false);
-            return;
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to load categories from CDN');
-      }
-      // Fallback
-      setCategories([
-        { id: 'daily', name: '日常', emoji: '☀️', sort: 1 },
-        { id: 'food', name: '美食', emoji: '🍜', sort: 2 },
-        { id: 'travel', name: '出行', emoji: '✈️', sort: 3 },
-        { id: 'work', name: '职场', emoji: '💼', sort: 4 },
-        { id: 'healing', name: '治愈', emoji: '🌿', sort: 5 },
-        { id: 'sports', name: '运动', emoji: '🏃', sort: 6 },
-        { id: 'shopping', name: '购物', emoji: '🛍️', sort: 7 },
-        { id: 'social', name: '社交', emoji: '🎉', sort: 8 },
-        { id: 'culture', name: '文化', emoji: '🎭', sort: 9 },
-        { id: 'nature', name: '自然', emoji: '🌊', sort: 10 },
-        { id: 'home', name: '居家', emoji: '🏠', sort: 11 },
-        { id: 'health', name: '健康', emoji: '🏥', sort: 12 },
-        { id: 'campus', name: '校园', emoji: '🎓', sort: 13 },
-        { id: 'beauty', name: '美妆穿搭', emoji: '💄', sort: 14 },
-        { id: 'pets', name: '萌宠', emoji: '🐾', sort: 15 },
-        { id: 'creative', name: '手作文艺', emoji: '✨', sort: 16 },
-      ]);
-      setCategoriesLoading(false);
-    };
-    loadCategories();
-  }, []);
 
   const saveApiKey = (key: string) => {
     setApiKey(key);
@@ -118,10 +65,6 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
     }
     if (!imageFile) {
       message.error('请上传场景图片');
-      return;
-    }
-    if (!categoryId) {
-      message.error('请选择分类');
       return;
     }
 
@@ -159,11 +102,6 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
           upload_file_id: fileId,
         },
       };
-      if (categoryId) {
-        // Pass category name to Dify for prompt context
-        const cat = categories.find((c) => c.id === categoryId);
-        inputs.category = cat ? cat.name : categoryId;
-      }
       if (title.trim()) inputs.title = title.trim();
 
       const runRes = await fetch(`${DIFY_BASE_URL}/workflows/run`, {
@@ -266,7 +204,7 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
 
       <Card title="🚀 AI 场景生成器" style={{ marginBottom: 24 }}>
         <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
-          上传一张场景图片，AI 自动识别并生成词汇数据、音频，直接提交到 GitHub。
+          上传一张场景图片，AI 自动识别场景分类并生成词汇数据、音频，直接提交到 GitHub。
         </Text>
 
         {/* API Key Config */}
@@ -310,18 +248,6 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
           </div>
 
           <div>
-            <Text strong style={{ display: 'block', marginBottom: 8 }}>分类 *</Text>
-            <Select
-              value={categoryId || undefined}
-              onChange={setCategoryId}
-              loading={categoriesLoading}
-              placeholder="选择场景分类"
-              style={{ width: 200 }}
-              options={categories.map((c) => ({ label: `${c.emoji} ${c.name}`, value: c.id }))}
-            />
-          </div>
-
-          <div>
             <Text strong style={{ display: 'block', marginBottom: 8 }}>标题（选填，AI 自动生成）</Text>
             <Input
               value={title}
@@ -337,7 +263,7 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
             icon={<RocketOutlined />}
             onClick={runWorkflow}
             loading={generating}
-            disabled={!imageFile || !categoryId || !apiKey}
+            disabled={!imageFile || !apiKey}
           >
             生成场景
           </Button>

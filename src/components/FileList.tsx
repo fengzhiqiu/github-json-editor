@@ -37,6 +37,9 @@ import {
   EllipsisOutlined,
   CheckSquareOutlined,
   CloseSquareOutlined,
+  PlayCircleOutlined,
+  PauseCircleOutlined,
+  SoundOutlined,
 } from '@ant-design/icons';
 import { RepoConfig, GitHubFile } from '../types';
 import { useGitHub } from '../hooks/useGitHub';
@@ -95,6 +98,38 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set()); // Set of file.sha
   const [batchDeleting, setBatchDeleting] = useState(false);
 
+  // Audio player state
+  const [playingAudioSha, setPlayingAudioSha] = useState<string>('');
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+
+  const isAudioFile = (filename: string): boolean => {
+    const ext = filename.toLowerCase().split('.').pop() || '';
+    return ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac', 'webm'].includes(ext);
+  };
+
+  const toggleAudioPlay = (file: GitHubFile) => {
+    const fileUrl = getImageUrl(file); // same raw URL pattern works for audio
+    if (playingAudioSha === file.sha) {
+      // Stop playing
+      audioPlayerRef.current?.pause();
+      setPlayingAudioSha('');
+    } else {
+      // Start playing new audio
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+      }
+      const audio = new Audio(fileUrl);
+      audio.onended = () => setPlayingAudioSha('');
+      audio.onerror = () => {
+        message.warning('音频加载失败');
+        setPlayingAudioSha('');
+      };
+      audio.play();
+      audioPlayerRef.current = audio;
+      setPlayingAudioSha(file.sha);
+    }
+  };
+
   // Compute the full current path
   const currentFullPath = subPath
     ? `${repoConfig.path.replace(/\/+$/, '')}/${subPath}`
@@ -121,6 +156,12 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
   useEffect(() => {
     loadFiles();
     setCurrentPage(1);
+    // Stop audio when navigating to a different directory
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current = null;
+      setPlayingAudioSha('');
+    }
   }, [repoConfig, refreshKey, subPath]);
 
   const reloadAfterChange = async () => {
@@ -144,6 +185,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
     if (lower.endsWith('.json')) return <FileTextOutlined style={{ fontSize: 48, color: '#1677ff' }} />;
     if (lower.endsWith('.md')) return <FileMarkdownOutlined style={{ fontSize: 48, color: '#52c41a' }} />;
     if (lower.endsWith('.pdf')) return <FilePdfOutlined style={{ fontSize: 48, color: '#f5222d' }} />;
+    if (isAudioFile(filename)) return <SoundOutlined style={{ fontSize: 48, color: '#722ed1' }} />;
     return <FileOutlined style={{ fontSize: 48, color: '#999' }} />;
   };
 
@@ -652,6 +694,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
     const isDir = file.type === 'dir';
     const isImage = !isDir && isImageFile(file.name);
     const isJson = !isDir && file.name.toLowerCase().endsWith('.json');
+    const isAudio = !isDir && isAudioFile(file.name);
 
     if (isDir) {
       return (
@@ -828,7 +871,18 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
                   编辑
                 </Button>
               )}
-              {/* For non-json files (images etc), show only the ⋯ menu */}
+              {isAudio && (
+                <Button
+                  size="small"
+                  type={playingAudioSha === file.sha ? 'primary' : 'default'}
+                  icon={playingAudioSha === file.sha ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+                  onClick={(e) => { e.stopPropagation(); toggleAudioPlay(file); }}
+                  style={{ flex: 1, fontSize: 12 }}
+                >
+                  {playingAudioSha === file.sha ? '暂停' : '播放'}
+                </Button>
+              )}
+              {/* For non-json/non-audio files (images etc), show only the ⋯ menu */}
               <Dropdown
                 menu={{ items: moreItems }}
                 trigger={['click']}
