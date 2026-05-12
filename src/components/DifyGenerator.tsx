@@ -79,10 +79,17 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
       // Fallback
       setCategories([
         { id: 'daily', name: '日常', emoji: '☀️', sort: 1 },
-        { id: 'healing', name: '治愈', emoji: '🌿', sort: 2 },
-        { id: 'travel', name: '出行', emoji: '🚶', sort: 3 },
-        { id: 'food', name: '美食', emoji: '🍜', sort: 4 },
-        { id: 'work', name: '职场', emoji: '💼', sort: 5 },
+        { id: 'food', name: '美食', emoji: '🍜', sort: 2 },
+        { id: 'travel', name: '出行', emoji: '✈️', sort: 3 },
+        { id: 'work', name: '职场', emoji: '💼', sort: 4 },
+        { id: 'healing', name: '治愈', emoji: '🌿', sort: 5 },
+        { id: 'sports', name: '运动', emoji: '🏃', sort: 6 },
+        { id: 'shopping', name: '购物', emoji: '🛍️', sort: 7 },
+        { id: 'social', name: '社交', emoji: '🎉', sort: 8 },
+        { id: 'culture', name: '文化', emoji: '🎭', sort: 9 },
+        { id: 'nature', name: '自然', emoji: '🌊', sort: 10 },
+        { id: 'home', name: '居家', emoji: '🏠', sort: 11 },
+        { id: 'health', name: '健康', emoji: '🏥', sort: 12 },
       ]);
       setCategoriesLoading(false);
     };
