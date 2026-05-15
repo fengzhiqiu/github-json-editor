@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Card,
   Button,
@@ -46,7 +46,7 @@ import { useGitHub } from '../hooks/useGitHub';
 import { isImageFile, getFileSha, getFileContent, updateFile } from '../utils/github';
 import imageCompression from 'browser-image-compression';
 import ScenePreview, { SceneData } from './ScenePreview';
-import { EyeOutlined } from '@ant-design/icons';
+import { EyeOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
@@ -92,6 +92,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewSceneData, setPreviewSceneData] = useState<SceneData | null>(null);
+  const [previewingFile, setPreviewingFile] = useState<GitHubFile | null>(null);
 
   // Multi-select state
   const [selectMode, setSelectMode] = useState(false);
@@ -455,12 +456,19 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
   // Check if we're in a scenes directory (for preview button)
   const isInScenesDir = currentFullPath.includes('scenes') || subPath.includes('scenes');
 
-  const handlePreviewScene = async (file: GitHubFile) => {
+  // Sorted list of scene files (numbered JSON) for prev/next navigation
+  const sceneFiles = useMemo(() => {
+    return allFiles
+      .filter((f) => f.type !== 'dir' && /^\d+\.json$/.test(f.name))
+      .sort((a, b) => parseInt(a.name) - parseInt(b.name));
+  }, [allFiles]);
+
+  const loadScenePreview = useCallback(async (file: GitHubFile) => {
     setPreviewLoading(true);
     setPreviewVisible(true);
     setPreviewSceneData(null);
+    setPreviewingFile(file);
     try {
-      // Load from GitHub raw URL for immediate access
       const rawUrl = `https://raw.githubusercontent.com/${repoConfig.owner}/${repoConfig.repo}/${repoConfig.branch || 'main'}/${file.path}`;
       const res = await fetch(rawUrl);
       if (!res.ok) throw new Error(`加载失败: ${res.status}`);
@@ -469,10 +477,41 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
     } catch (e: any) {
       message.error('加载场景数据失败: ' + e.message);
       setPreviewVisible(false);
+      setPreviewingFile(null);
     } finally {
       setPreviewLoading(false);
     }
+  }, [repoConfig]);
+
+  const handlePreviewScene = async (file: GitHubFile) => {
+    await loadScenePreview(file);
   };
+
+  // Keyboard navigation for scene preview (← / →)
+  useEffect(() => {
+    if (!previewVisible || !previewingFile || sceneFiles.length < 2) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (previewLoading) return;
+      const currentIdx = sceneFiles.findIndex((f) => f.sha === previewingFile.sha);
+      if (currentIdx === -1) return;
+
+      let nextIdx = -1;
+      if (e.key === 'ArrowLeft') {
+        nextIdx = currentIdx > 0 ? currentIdx - 1 : sceneFiles.length - 1;
+      } else if (e.key === 'ArrowRight') {
+        nextIdx = currentIdx < sceneFiles.length - 1 ? currentIdx + 1 : 0;
+      }
+
+      if (nextIdx >= 0 && nextIdx !== currentIdx) {
+        e.preventDefault();
+        loadScenePreview(sceneFiles[nextIdx]);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewVisible, previewingFile, previewLoading, sceneFiles, loadScenePreview]);
 
   const [deletingScene, setDeletingScene] = useState(false);
 
@@ -1106,10 +1145,45 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
 
       {/* Scene Preview Modal */}
       <Modal
-        title={previewSceneData ? `📱 场景预览 — ${previewSceneData.title}` : '加载中...'}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 24 }}>
+            <span>{previewSceneData ? `📱 场景预览 — ${previewSceneData.title}` : '加载中...'}</span>
+            {sceneFiles.length > 1 && previewingFile && (
+              <Space size={4} style={{ marginLeft: 16 }}>
+                <Button
+                  size="small"
+                  icon={<LeftOutlined />}
+                  disabled={previewLoading}
+                  onClick={() => {
+                    const idx = sceneFiles.findIndex((f) => f.sha === previewingFile.sha);
+                    if (idx >= 0) loadScenePreview(sceneFiles[idx > 0 ? idx - 1 : sceneFiles.length - 1]);
+                  }}
+                />
+                <Text type="secondary" style={{ fontSize: 12, minWidth: 48, textAlign: 'center', display: 'inline-block' }}>
+                  {sceneFiles.findIndex((f) => f.sha === previewingFile.sha) + 1}/{sceneFiles.length}
+                </Text>
+                <Button
+                  size="small"
+                  icon={<RightOutlined />}
+                  disabled={previewLoading}
+                  onClick={() => {
+                    const idx = sceneFiles.findIndex((f) => f.sha === previewingFile.sha);
+                    if (idx >= 0) loadScenePreview(sceneFiles[idx < sceneFiles.length - 1 ? idx + 1 : 0]);
+                  }}
+                />
+              </Space>
+            )}
+          </div>
+        }
         open={previewVisible}
-        onCancel={() => setPreviewVisible(false)}
-        footer={null}
+        onCancel={() => { setPreviewVisible(false); setPreviewingFile(null); }}
+        footer={
+          sceneFiles.length > 1 ? (
+            <div style={{ textAlign: 'center' }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>💡 按 ← → 方向键快速切换场景</Text>
+            </div>
+          ) : null
+        }
         width={480}
         centered
         destroyOnClose
