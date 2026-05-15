@@ -172,27 +172,63 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
       throw new Error('无法获取场景 ID');
     }
 
-    // Step 3: Fetch scene JSON from CDN with retry
-    report('生成成功，正在加载 CDN 预览...');
-    const jsonUrl = `${CDN_BASE}/data/scenes/${sceneId}.json?_t=${Date.now()}`;
+    // Step 3: Fetch scene JSON + image + audio from CDN with retry (CDN warm-up)
+    report('生成成功，正在预热 CDN（JSON + 图片 + 音频）...');
+    const cacheBuster = `?_t=${Date.now()}`;
+    const jsonUrl = `${CDN_BASE}/data/scenes/${sceneId}.json${cacheBuster}`;
+    const imageUrl = `${CDN_BASE}/img/scene-${sceneId}.webp${cacheBuster}`;
+    const audioUrl = `${CDN_BASE}/audio/scene-${sceneId}.mp3${cacheBuster}`;
+
+    // Helper: check if a URL is accessible (HEAD or GET)
+    const checkUrl = async (url: string): Promise<boolean> => {
+      try {
+        const res = await fetch(url, { method: 'HEAD' });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    };
 
     let sceneJson: SceneData | null = null;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    let imageReady = false;
+    let audioReady = false;
+
+    for (let attempt = 0; attempt < 8; attempt++) {
       await new Promise((r) => setTimeout(r, attempt === 0 ? 3000 : 5000));
-      try {
-        const jsonRes = await fetch(jsonUrl);
-        if (jsonRes.ok) {
-          sceneJson = await jsonRes.json();
-          break;
-        }
-      } catch {
-        // retry
+
+      // Check JSON
+      if (!sceneJson) {
+        try {
+          const jsonRes = await fetch(jsonUrl);
+          if (jsonRes.ok) {
+            sceneJson = await jsonRes.json();
+          }
+        } catch { /* retry */ }
       }
-      report(`CDN 同步中，等待第 ${attempt + 2} 次尝试...`);
+
+      // Check image
+      if (!imageReady) {
+        imageReady = await checkUrl(imageUrl);
+      }
+
+      // Check audio
+      if (!audioReady) {
+        audioReady = await checkUrl(audioUrl);
+      }
+
+      // All three ready → done
+      if (sceneJson && imageReady && audioReady) break;
+
+      const pending = [
+        !sceneJson && 'JSON',
+        !imageReady && '图片',
+        !audioReady && '音频',
+      ].filter(Boolean).join('、');
+      report(`CDN 预热中（等待${pending}），第 ${attempt + 2}/8 次...`);
     }
 
+    // Fallback: GitHub raw for JSON if CDN failed
     if (!sceneJson) {
-      // Fallback: try GitHub raw directly
       const rawUrl = `https://raw.githubusercontent.com/techinsblog/cdn/main/en/data/scenes/${sceneId}.json`;
       const rawRes = await fetch(rawUrl);
       if (rawRes.ok) {
@@ -202,6 +238,21 @@ const DifyGenerator: React.FC<DifyGeneratorProps> = ({ onBack, onEditScene }) =>
 
     if (!sceneJson) {
       throw new Error('无法加载生成的场景 JSON（CDN 尚未同步）');
+    }
+
+    // Fallback: GitHub raw for image/audio
+    if (!imageReady) {
+      const rawImgUrl = `https://raw.githubusercontent.com/techinsblog/cdn/main/en/img/scene-${sceneId}.webp`;
+      imageReady = await checkUrl(rawImgUrl);
+    }
+    if (!audioReady) {
+      const rawAudioUrl = `https://raw.githubusercontent.com/techinsblog/cdn/main/en/audio/scene-${sceneId}.mp3`;
+      audioReady = await checkUrl(rawAudioUrl);
+    }
+
+    if (!imageReady || !audioReady) {
+      const missing = [!imageReady && '图片', !audioReady && '音频'].filter(Boolean).join('、');
+      throw new Error(`场景 JSON 已加载，但 ${missing} 文件 CDN 预热失败`);
     }
 
     return { sceneId, sceneData: sceneJson };
