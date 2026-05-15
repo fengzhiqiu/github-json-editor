@@ -162,7 +162,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ repoConfig, onBack }) => {
     setLoadingId(true);
     try {
       const content = await github.getFileContent(
-        'techinsblog', 'cdn', 'en/data/scenes-index.json', 'main'
+        'techinsblog', 'cdn', 'en/data/scenes.json', 'main'
       );
       const data = JSON.parse(content.content);
       const scenes = data.scenes || data;
@@ -171,7 +171,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ repoConfig, onBack }) => {
         : 0;
       setNextId(maxId + 1);
     } catch (e) {
-      message.error('无法读取 scenes-index.json: ' + (e as Error).message);
+      message.error('无法读取 scenes.json: ' + (e as Error).message);
       setNextId(1);
     } finally {
       setLoadingId(false);
@@ -396,7 +396,7 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ repoConfig, onBack }) => {
       await new Promise((r) => setTimeout(r, 1500));
 
       const indexContent = await github.getFileContent(
-        'techinsblog', 'cdn', 'en/data/scenes-index.json', 'main'
+        'techinsblog', 'cdn', 'en/data/scenes.json', 'main'
       );
       const indexData = JSON.parse(indexContent.content);
       const newEntry = buildIndexEntry();
@@ -410,10 +410,10 @@ const SceneEditor: React.FC<SceneEditorProps> = ({ repoConfig, onBack }) => {
       }
 
       await github.updateFile(
-        'techinsblog', 'cdn', 'en/data/scenes-index.json',
+        'techinsblog', 'cdn', 'en/data/scenes.json',
         JSON.stringify(indexData, null, 2),
         indexContent.sha,
-        `Update scenes-index: add scene ${nextId}`, 'main'
+        `Update scenes: add scene ${nextId}`, 'main'
       );
 
       message.success(`🎉 场景 ${nextId} 创建成功！`);

@@ -145,7 +145,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
 
       // Detect CDN scene structure
       const isCdnRepo = repoConfig.owner === 'techinsblog' && repoConfig.repo === 'cdn';
-      const hasSceneIndex = files.some((f) => f.name === 'scenes-index.json');
+      const hasSceneIndex = files.some((f) => f.name === 'scenes.json' || f.name === 'scenes-index.json');
       const isEnDataPath = currentFullPath.startsWith('en/data') || currentFullPath === 'en/data';
       setShowSceneButton((isCdnRepo && isEnDataPath) || hasSceneIndex);
     } catch (e) {
@@ -537,9 +537,9 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
         console.warn(`删除音频失败（已忽略）:`, audioErr);
       }
 
-      // 4. Update scenes-index.json — remove entry for this scene
+      // 4. Update scenes.json — remove entry for this scene
       // Fetch fresh content AFTER deletes to get latest SHA
-      const indexPath = 'en/data/scenes-index.json';
+      const indexPath = 'en/data/scenes.json';
       const indexContent = await getFileContent(repoConfig.owner, repoConfig.repo, indexPath, branch);
       const indexData = JSON.parse(indexContent.content);
       const originalLength = indexData.scenes.length;
@@ -558,7 +558,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
           branch
         );
       } else {
-        console.warn(`场景 ${sceneId} 不在 scenes-index.json 中，跳过更新`);
+        console.warn(`场景 ${sceneId} 不在 scenes.json 中，跳过更新`);
       }
 
       message.success(`场景 ${sceneId} 已完全删除（JSON + 图片 + 音频 + 索引）`);
@@ -652,10 +652,10 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
       }
     }
 
-    // Update scenes-index.json if scene files were deleted
+    // Update scenes.json if scene files were deleted
     if (deletedSceneIds.length > 0) {
       try {
-        const indexPath = 'en/data/scenes-index.json';
+        const indexPath = 'en/data/scenes.json';
         const indexContent = await getFileContent(repoConfig.owner, repoConfig.repo, indexPath, branch);
         const indexData = JSON.parse(indexContent.content);
         const sceneIdSet = new Set(deletedSceneIds);
@@ -663,7 +663,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
         const updatedIndex = JSON.stringify(indexData, null, 2) + '\n';
         await updateFile(repoConfig.owner, repoConfig.repo, indexPath, updatedIndex, indexContent.sha, `Batch delete: update index (removed ${deletedSceneIds.length} scenes)`, branch);
       } catch (e) {
-        console.warn('更新 scenes-index.json 失败:', e);
+        console.warn('更新 scenes.json 失败:', e);
       }
     }
 
@@ -735,7 +735,7 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
       );
     }
 
-    const isSceneFile = isInScenesDir && isJson && file.name !== 'scenes-index.json' && !!file.name.match(/^\d+\.json$/);
+    const isSceneFile = isInScenesDir && isJson && file.name !== 'scenes.json' && file.name !== 'scenes-index.json' && !!file.name.match(/^\d+\.json$/);
 
     // "More" dropdown items
     const moreItems = [
