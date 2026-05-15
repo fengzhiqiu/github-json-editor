@@ -1178,11 +1178,48 @@ const FileList: React.FC<FileListProps> = ({ repoConfig, onSelectFile, onBack, o
         open={previewVisible}
         onCancel={() => { setPreviewVisible(false); setPreviewingFile(null); }}
         footer={
-          sceneFiles.length > 1 ? (
-            <div style={{ textAlign: 'center' }}>
-              <Text type="secondary" style={{ fontSize: 12 }}>💡 按 ← → 方向键快速切换场景</Text>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              {previewingFile && (
+                <Popconfirm
+                  title="确认删除该场景？"
+                  description="将同时删除 JSON、图片、音频及索引条目"
+                  onConfirm={async () => {
+                    if (!previewingFile) return;
+                    // Find next scene to navigate to after deletion
+                    const idx = sceneFiles.findIndex((f) => f.sha === previewingFile.sha);
+                    const nextFile = sceneFiles.length > 1
+                      ? sceneFiles[idx < sceneFiles.length - 1 ? idx + 1 : idx - 1]
+                      : null;
+                    await handleDeleteScene(previewingFile);
+                    if (nextFile) {
+                      loadScenePreview(nextFile);
+                    } else {
+                      setPreviewVisible(false);
+                      setPreviewingFile(null);
+                    }
+                  }}
+                  okText="删除"
+                  cancelText="取消"
+                  okButtonProps={{ danger: true }}
+                >
+                  <Button
+                    danger
+                    icon={<DeleteOutlined />}
+                    loading={deletingScene}
+                    size="small"
+                  >
+                    删除场景
+                  </Button>
+                </Popconfirm>
+              )}
             </div>
-          ) : null
+            <div>
+              {sceneFiles.length > 1 && (
+                <Text type="secondary" style={{ fontSize: 12 }}>💡 ← → 切换场景</Text>
+              )}
+            </div>
+          </div>
         }
         width={480}
         centered
